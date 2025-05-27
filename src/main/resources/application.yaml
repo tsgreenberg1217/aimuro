@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: aimuro
+  ai:
+    vectorstore:
+      pgvector:
+        initialize-schema: true
+    openai:
+#      api-key: ${OPENAI_API_KEY}
+      api-key: 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
+      model: o4-mini

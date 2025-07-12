@@ -1,6 +1,11 @@
 spring:
   application:
     name: aimuro
+  datasource:
+    url: jdbc:postgresql://localhost:5432/gundam-tcg-rules
+    username: user
+    password: password
+    host-auth-method: trust
   ai:
     vectorstore:
       pgvector:

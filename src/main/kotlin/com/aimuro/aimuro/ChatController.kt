@@ -1,39 +1,65 @@
 package com.aimuro.aimuro
 
 import org.springframework.ai.chat.client.ChatClient
-import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor
-import org.springframework.ai.vectorstore.pgvector.PgVectorStore
+import org.springframework.ai.chat.messages.AssistantMessage
+import org.springframework.ai.chat.messages.Message
+import org.springframework.ai.chat.messages.UserMessage
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RestController
+import reactor.core.publisher.Flux
 
 
-data class RulesQuestion(
-    val question: String
+data class ChatRequest(
+    val conversation: List<ChatMessage>
+)
+
+data class ChatMessage(
+    val role: String,
+    val content: String
+)
+
+data class RulesResponse(
+    val answer: String
 )
 
 @RestController
 class ChatController(
-    private val vectorStore: PgVectorStore,
-    private val chatClientBuilder: ChatClient.Builder
+    private val chatClient: ChatClient
 ) {
 
-    lateinit var chatClient: ChatClient
-
-    init {
-        chatClient = chatClientBuilder
-            .defaultAdvisors(QuestionAnswerAdvisor(vectorStore))
-            .build()
-    }
-
-
     @PostMapping("/rules")
-    fun getRules(@RequestBody rulesQuestion: RulesQuestion): String {
-        val response = chatClient
-            .prompt()
-            .user(rulesQuestion.question).call().content() ?: "Hello Todd :)"
-        return response
+    fun getRules(@RequestBody request: ChatRequest): RulesResponse = sendAimuroRequest(request)
+        .call()
+        .run { content() ?: "Try asking the question in a different way" }
+        .run(::RulesResponse)
 
+    @PostMapping("/rulesStream")
+    fun getRulesStream(@RequestBody request: ChatRequest): Flux<RulesResponse> = sendAimuroRequest(request)
+        .stream()
+        .content()
+        .map(::RulesResponse)
+
+
+    private fun sendAimuroRequest(request: ChatRequest) = chatClient
+        .prompt()
+        .messages(
+            extractMessagesFromConversation(request.conversation).also { list ->
+                list.forEach { println("previous message for type ${it.messageType}: ${it.text}") }
+            }
+        )
+        .user(request.conversation.last().content)
+
+
+    private fun extractMessagesFromConversation(conversation: List<ChatMessage>): List<Message> {
+        return conversation.map { chatMessage ->
+            if (chatMessage.role == "user") {
+                UserMessage(chatMessage.content)
+            } else {
+                AssistantMessage(chatMessage.content)
+            }
+        }
     }
+
 
 }

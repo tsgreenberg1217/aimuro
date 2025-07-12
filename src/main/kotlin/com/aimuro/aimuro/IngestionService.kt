@@ -43,7 +43,7 @@ class IngestionService(
 
 
         // Ingest web rules
-        val tika = TikaDocumentReader(webRulesRtf)
+        val tika = TikaDocumentReader(rulesPdf)
         val rawDocs: List<Document> = tika.read()
 
         logger.info("Ingesting ${rawDocs.size} raw documents from ${webRulesRtf.filename}")

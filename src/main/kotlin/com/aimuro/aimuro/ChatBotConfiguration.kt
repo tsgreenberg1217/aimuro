@@ -5,8 +5,16 @@ import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvi
 import org.springframework.ai.chat.prompt.PromptTemplate
 import org.springframework.ai.vectorstore.SearchRequest
 import org.springframework.ai.vectorstore.pgvector.PgVectorStore
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+
+
+@Qualifier
+annotation class RulesAdvisor
+
+@Qualifier
+annotation class WebRulesAdvisor
 
 @Configuration
 class ChatBotConfiguration {
@@ -22,8 +30,8 @@ class ChatBotConfiguration {
         val advisor = QuestionAnswerAdvisor.builder(vectorStore)
             .searchRequest(
                 SearchRequest.builder()
-                    .similarityThreshold(0.75)
-                    .topK(8)
+//                    .similarityThreshold(0.75)
+//                    .topK(8)
                     .build()
             )
             .promptTemplate(promptTemplate)
@@ -33,6 +41,8 @@ class ChatBotConfiguration {
 
     @Bean
     fun aimuroChatClient(chatClientBuilder: ChatClient.Builder, gundamAdvisor: GundamAdvisor): ChatClient {
-        return chatClientBuilder.defaultAdvisors(gundamAdvisor).build()
+        return chatClientBuilder
+            .defaultAdvisors(gundamAdvisor)
+            .build()
     }
 }

@@ -23,41 +23,36 @@ class IngestionService(
 ) : CommandLineRunner {
 
     override fun run(vararg args: String?) {
-//        val sectionDocs = docService.getDocs(rulesPdf)
-//
-//        // 3️⃣ Token-based splitting for long sections using TokenTextSplitter
-//        val rulesSplitter = TokenTextSplitter.builder()
-//            .withChunkSize(600)
-//            .withMinChunkSizeChars(200)
-//            .withMinChunkLengthToEmbed(50)
-//            .withMaxNumChunks(100)
-//            .withKeepSeparator(true)
-//            .build() // defaults align with best practices :contentReference[oaicite:2]{index=2}
-//
-//        val chunks: List<Document> = rulesSplitter.apply(sectionDocs)
-//        // 4️⃣ Ingest all chunks into the vector store
-//        logger.info("Ingesting ${chunks.size} documents into the vector store from ${rulesPdf.filename}")
-//        pgVectorStore.accept(chunks)
-//        logger.info("Ingested documents into the vector store!!!!!")
+        val rulesDoc = docService.getDocs(rulesPdf)
 
+        val sectionDocs = rulesDoc.run(
+            TokenTextSplitter.builder()
+                .withChunkSize(1000)
+                .withMinChunkSizeChars(500)
+                .withMinChunkLengthToEmbed(5)
+                .withKeepSeparator(true)
+                .build()
+            ::apply
+        )
+
+        // 4️⃣ Ingest all chunks into the vector store
+        logger.info("Ingesting ${sectionDocs.size} documents into the vector store from ${rulesPdf.filename}")
+        pgVectorStore.accept(sectionDocs)
+        logger.info("Ingested documents into the vector store!!!!!")
+
+
+        val smallerSections = docService.getDocs(rulesPdf, Pattern.compile("(?m)^(\\d+(-\\d+)*\\.)"), "in-depth-small")
+
+        logger.info("Ingesting ${smallerSections.size} documents into the vector store from ${rulesPdf.filename}")
+        pgVectorStore.accept(smallerSections)
+        logger.info("Ingested documents into the vector store!!!!!")
 
 
         // Ingest web rules
-        val tika = TikaDocumentReader(webRulesRtf)
-        val rawDocs: List<Document> = tika.read()
-
-        logger.info("Ingesting ${rawDocs.size} raw documents from ${webRulesRtf.filename}")
-
-        val webSplitter = TokenTextSplitter.builder()
-            .withChunkSize(600)
-            .withMinChunkSizeChars(200)
-            .withMinChunkLengthToEmbed(5)
-            .withMaxNumChunks(100)
-            .withKeepSeparator(true)
-            .build()
+        val webDocs = docService.getDocs(webRulesRtf, Pattern.compile("(?m)^(\\d+-\\d+\\.)"), "general")
 
         logger.info("Ingesting web rules")
-        pgVectorStore.accept(webSplitter.apply(rawDocs))
+        pgVectorStore.accept(webDocs)
         logger.info("All done!!!")
 
     }

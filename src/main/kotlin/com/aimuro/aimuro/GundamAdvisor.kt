@@ -6,7 +6,7 @@ import org.springframework.ai.chat.client.advisor.api.BaseAdvisor
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor
 import org.springframework.stereotype.Service
 
-@Service
+//@Service
 class GundamAdvisor(val advisor: QuestionAnswerAdvisor) : BaseAdvisor by advisor {
 
     override fun before(chatClientRequest: ChatClientRequest, advisorChain: AdvisorChain): ChatClientRequest {

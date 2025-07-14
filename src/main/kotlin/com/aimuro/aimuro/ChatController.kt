@@ -42,7 +42,7 @@ class ChatController(
 
 
     private fun sendAimuroRequest(request: ChatRequest) = chatClient
-        .prompt()
+        .prompt(promptTemplate.template)
         .messages(
             extractMessagesFromConversation(request.conversation).also { list ->
                 list.forEach { println("previous message for type ${it.messageType}: ${it.text}") }

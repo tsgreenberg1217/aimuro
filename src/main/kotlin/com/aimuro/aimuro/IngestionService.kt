@@ -27,8 +27,8 @@ class IngestionService(
 
         val sectionDocs = rulesDoc.run(
             TokenTextSplitter.builder()
-                .withChunkSize(1000)
-                .withMinChunkSizeChars(500)
+                .withChunkSize(400)
+                .withMinChunkSizeChars(200)
                 .withMinChunkLengthToEmbed(5)
                 .withKeepSeparator(true)
                 .build()

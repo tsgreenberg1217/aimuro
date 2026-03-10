@@ -72,7 +72,9 @@ class ChatBotConfiguration {
 
     @Bean
     @SmallComprehensiveRulesAdvisor
-    fun getSmallCompRulesAdvicor(vectorStore: PgVectorStore): BaseAdvisor {
+    fun getSmallCompRulesAdvicor(
+        vectorStore: PgVectorStore
+    ): BaseAdvisor {
         val advisor = QuestionAnswerAdvisor.builder(vectorStore)
             .searchRequest(
                 SearchRequest.builder()

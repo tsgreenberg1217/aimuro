@@ -30,6 +30,7 @@ dependencies {
 	implementation("org.springframework.ai:spring-ai-tika-document-reader")
 	implementation("org.springframework.ai:spring-ai-starter-vector-store-pgvector")
 	implementation("org.postgresql:postgresql")
+	implementation("org.springframework.ai:spring-ai-markdown-document-reader")
 //	developmentOnly("org.springframework.boot:spring-boot-docker-compose")
 //	developmentOnly("org.springframework.ai:spring-ai-spring-boot-docker-compose")
 	testImplementation("org.springframework.boot:spring-boot-starter-test")

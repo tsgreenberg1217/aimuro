@@ -1,11 +1,20 @@
 package com.aimuro.aimuro
 
 import org.springframework.ai.document.Document
+import org.springframework.ai.transformer.splitter.TokenTextSplitter
 import org.springframework.core.io.Resource
 import org.springframework.stereotype.Service
 
 @Service("markdownDocService")
 class MarkdownDocService : DocService {
+
+    private val splitter = TokenTextSplitter(
+        /* defaultChunkSize    */ 400,
+        /* minChunkSizeChars   */ 200,
+        /* minChunkLengthToEmbed */ 5,
+        /* maxNumChunks        */ 100,
+        /* keepSeparator       */ true,
+    )
 
     override fun getDocs(resource: Resource): List<Document> {
         val lines = resource.inputStream.bufferedReader().readLines()
@@ -19,17 +28,36 @@ class MarkdownDocService : DocService {
         fun flushSection() {
             val title = currentTitle ?: return
             val content = currentLines.joinToString("\n").trim()
-            if (content.isNotBlank()) {
-                // Prepend the section title so embeddings carry semantic context
-                val textWithHeader = "Gundam Card Game Rules — $title\n\n$content"
-                val keywords = extractKeywords(content)
+            if (content.isBlank()) return
+
+            val keywords = extractKeywords(content)
+            val sectionNum = currentSectionNum ?: sectionIndex
+
+            // PARENT: The section document is the logical parent. Its text has the section
+            // title prepended so that when the splitter breaks it into child chunks, each
+            // child's text begins with — or at minimum was derived from — this header context.
+            // This is how the hierarchy is preserved: the title travels into every child.
+            val textWithHeader = "Gundam Card Game Rules — $title\n\n$content"
+            val sectionDoc = Document.builder()
+                .text(textWithHeader)
+                .metadata("title", title)
+                .metadata("section", sectionNum)
+                .metadata("keywords", keywords.joinToString(","))
+                .metadata("source", resource.filename.orEmpty())
+                .build()
+
+            // CHILDREN: The splitter breaks the parent document into token-bounded chunks.
+            // Each child inherits the parent's metadata (title, section, keywords, source)
+            // via chunk.metadata, establishing the parent-child link. chunk_index and
+            // chunk_total are added so consumers know where a chunk sits within its section.
+            val chunks = splitter.apply(listOf(sectionDoc))
+            chunks.forEachIndexed { i, chunk ->
                 documents.add(
                     Document.builder()
-                        .text(textWithHeader)
-                        .metadata("title", title)
-                        .metadata("section", currentSectionNum ?: sectionIndex)
-                        .metadata("keywords", keywords.joinToString(","))
-                        .metadata("source", resource.filename.orEmpty())
+                        .text(chunk.text)       // child text — a token-bounded slice of the parent
+                        .metadata(chunk.metadata) // inherited from parent: title, section, keywords, source
+                        .metadata("chunk_index", i)
+                        .metadata("chunk_total", chunks.size)
                         .build()
                 )
             }

@@ -1,0 +1,20 @@
+query FindCards($filter: CardFilter) {
+    cards(filter: $filter) {
+        id
+        code
+        rarity
+        name
+        effect
+        level
+        cost
+        color
+        cardType
+        zone
+        trait
+        link
+        ap
+        hp
+        sourceTitle
+        getIt
+    }
+}

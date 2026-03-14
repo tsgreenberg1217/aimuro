@@ -1,0 +1,20 @@
+query FindCard($name: String) {
+    cards(name: $name) {
+        id
+        code
+        rarity
+        name
+        effect
+        level
+        cost
+        color
+        cardType
+        zone
+        trait
+        link
+        ap
+        hp
+        sourceTitle
+        getIt
+    }
+}

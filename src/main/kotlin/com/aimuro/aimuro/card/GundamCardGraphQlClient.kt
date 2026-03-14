@@ -1,25 +1,24 @@
 package com.aimuro.aimuro.card
 
-import org.springframework.graphql.client.HttpGraphQlClient
+import org.springframework.graphql.client.HttpSyncGraphQlClient
 import org.springframework.stereotype.Service
-import reactor.core.publisher.Mono
 
 @Service
 class GundamCardGraphQlClient(
-    private val graphQlClient: HttpGraphQlClient,
+    private val graphQlClient: HttpSyncGraphQlClient,
 ) : GundamCardService {
 
-    override fun findCards(filter: CardFilter): Mono<List<CardDto>> =
+    override fun findCards(filter: CardFilter): List<CardDto> =
         graphQlClient
             .documentName("findCards")
             .variable("filter", filter)
-            .retrieve("cards")
+            .retrieveSync("cards")
             .toEntityList(CardDto::class.java)
 
-    override fun findCard(name: String): Mono<List<CardDto>> =
+    override fun findCard(name: String): List<CardDto> =
         graphQlClient
             .documentName("findCard")
             .variable("name", name)
-            .retrieve("cards")
+            .retrieveSync("cards")
             .toEntityList(CardDto::class.java)
 }

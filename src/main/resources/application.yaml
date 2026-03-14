@@ -4,6 +4,9 @@ gundam:
       url: http://localhost:8081/graphql
 
 spring:
+  threads:
+    virtual:
+      enabled: true
   profiles:
     active: debug
   application:

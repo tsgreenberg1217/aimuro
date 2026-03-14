@@ -1,6 +1,7 @@
 # Gundam Card Game Comprehensive Rules Ver. 1.5.0 Updated January 30, 2025
- ## Table of Contents 1. Game Overview 2. Card Information 3. Card Types 4. Game Locations 5. Essential Game Terminology 6. Preparing to Play 7. Game Progression 8. Attacking and Battles 9. Action Steps 10. Effect Activation and Resolution 11. Rules Management 12. Multiplayer Battle 13. Keyword Effects and Keywords
- ## Comprehensive Rules
+
+[//]: # ( # Table of Contents 1. Game Overview 2. Card Information 3. Card Types 4. Game Locations 5. Essential Game Terminology 6. Preparing to Play 7. Game Progression 8. Attacking and Battles 9. Action Steps 10. Effect Activation and Resolution 11. Rules Management 12. Multiplayer Battle 13. Keyword Effects and Keywords)
+ # Comprehensive Rules
  ## 1) Game Overview
  #### 1-1. Number of Players
  ##### 1-1-1. Gundam Card Game is a competitive game between two players. Refer to the multiplayer rules for rules that apply to games conducted with other player counts.

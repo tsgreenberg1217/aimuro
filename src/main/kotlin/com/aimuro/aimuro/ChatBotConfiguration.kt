@@ -5,7 +5,7 @@ import org.springframework.ai.chat.client.advisor.api.BaseAdvisor
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor
 import org.springframework.ai.chat.prompt.PromptTemplate
 import org.springframework.ai.vectorstore.SearchRequest
-import org.springframework.ai.vectorstore.pgvector.PgVectorStore
+import org.springframework.ai.vectorstore.VectorStore
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -32,22 +32,21 @@ val compPromptTemplate = PromptTemplate(
 
 @Qualifier
 annotation class ComprehensiveRulesAdvisor
-@Qualifier
-annotation class SmallComprehensiveRulesAdvisor
-
-@Qualifier
-annotation class WebRulesAdvisor
 
 @Configuration
 class ChatBotConfiguration {
+
+
     @Bean
-    @WebRulesAdvisor
-    fun getQuestionAnswerAdvisor(vectorStore: PgVectorStore): BaseAdvisor {
+    @ComprehensiveRulesAdvisor
+    fun getSmallCompRulesAdvisor(
+        vectorStore: VectorStore
+    ): BaseAdvisor {
         val advisor = QuestionAnswerAdvisor.builder(vectorStore)
             .searchRequest(
                 SearchRequest.builder()
-                    .filterExpression("detail_level == 'general'")
-                    .topK(2)
+                    .topK(6)
+                    .similarityThreshold(.75)
                     .build()
             )
             .promptTemplate(generalPromptTemplate)
@@ -55,51 +54,14 @@ class ChatBotConfiguration {
         return GundamAdvisor(advisor)
     }
 
-
-    @Bean
-    @ComprehensiveRulesAdvisor
-    fun getCompRulesAdvicor(vectorStore: PgVectorStore): BaseAdvisor {
-        val advisor = QuestionAnswerAdvisor.builder(vectorStore)
-            .searchRequest(
-                SearchRequest.builder()
-                    .filterExpression("detail_level == 'in-depth'")
-                    .build()
-            )
-            .promptTemplate(compPromptTemplate)
-            .build()
-        return GundamAdvisor(advisor)
-    }
-
-    @Bean
-    @SmallComprehensiveRulesAdvisor
-    fun getSmallCompRulesAdvicor(
-        vectorStore: PgVectorStore
-    ): BaseAdvisor {
-        val advisor = QuestionAnswerAdvisor.builder(vectorStore)
-            .searchRequest(
-                SearchRequest.builder()
-                    .filterExpression("detail_level == 'in-depth-small'")
-                    .topK(16)
-                    .similarityThreshold(.75)
-                    .build()
-            )
-            .promptTemplate(compPromptTemplate)
-            .build()
-        return GundamAdvisor(advisor)
-    }
-
     @Bean
     fun aimuroChatClient(
         chatClientBuilder: ChatClient.Builder,
-        @WebRulesAdvisor webRulesAdvisor:  BaseAdvisor,
-        @ComprehensiveRulesAdvisor comprehensiveRulesAdvisor: BaseAdvisor,
-        @SmallComprehensiveRulesAdvisor smallcomprehensiveRulesAdvisor: BaseAdvisor
+        @ComprehensiveRulesAdvisor smallComprehensiveRulesAdvisor: BaseAdvisor
     ): ChatClient {
         return chatClientBuilder
             .defaultAdvisors(
-                smallcomprehensiveRulesAdvisor,
-                comprehensiveRulesAdvisor,
-                webRulesAdvisor
+                smallComprehensiveRulesAdvisor,
             )
             .build()
     }

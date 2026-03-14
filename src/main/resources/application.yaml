@@ -1,4 +1,6 @@
 spring:
+  profiles:
+    active: debug
   application:
     name: aimuro
   datasource:

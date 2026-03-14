@@ -1,59 +1,36 @@
 package com.aimuro.aimuro
 
 import org.slf4j.LoggerFactory
-import org.springframework.ai.transformer.splitter.TokenTextSplitter
-import org.springframework.ai.vectorstore.pgvector.PgVectorStore
+import org.springframework.ai.vectorstore.VectorStore
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.CommandLineRunner
 import org.springframework.core.io.Resource
 import org.springframework.stereotype.Component
-import java.util.regex.Pattern
 
 
 @Component
 class IngestionService(
-    val pgVectorStore: PgVectorStore,
+    val vectorStore: VectorStore,
     @Qualifier("markdownDocService") val docService: DocService,
     @Value("classpath:/docs/gundam_card_game_comprehensive_rules_v1_5_0.md") val comprehensiveRules: Resource,
     @Value("classpath:/docs/gunam_rules_web.rtf") val webRulesRtf: Resource,
 ) : CommandLineRunner {
 
     override fun run(vararg args: String?) {
-        val rulesDoc = docService.getDocs(comprehensiveRules)
+        // Split by H2 section — each section becomes one document with
+        // title prepended and keyword metadata attached (see MarkdownDocService).
+        // A routing index chunk is also appended automatically.
+        val sectionDocs = docService.getDocs(comprehensiveRules)
 
-        val sectionDocs = rulesDoc.run(
-            TokenTextSplitter.builder()
-                .withChunkSize(400)
-                .withMinChunkSizeChars(200)
-                .withMinChunkLengthToEmbed(5)
-                .withKeepSeparator(true)
-                .build()
-            ::apply
-        )
+        logger.info("Ingesting ${sectionDocs.size} section documents from ${comprehensiveRules.filename}")
+        vectorStore.accept(sectionDocs)
+        logger.info("Ingestion complete.")
 
-        // 4️⃣ Ingest all chunks into the vector store
-        logger.info("Ingesting ${sectionDocs.size} documents into the vector store from ${comprehensiveRules.filename}")
-        pgVectorStore.accept(sectionDocs)
-        logger.info("Ingested documents into the vector store!!!!!")
-
-
-        val smallerSections = docService.getDocs(comprehensiveRules)
-
-        logger.info("Ingesting ${smallerSections.size} documents into the vector store from ${comprehensiveRules.filename}")
-        pgVectorStore.accept(smallerSections)
-        logger.info("Ingested documents into the vector store!!!!!")
-
-
-        // Ingest web rules
-
-        val webDocs = docService.getDocs(webRulesRtf)
-
-
-        logger.info("Ingesting web rules")
-        pgVectorStore.accept(webDocs)
-        logger.info("All done!!!")
-
+        // Uncomment to also ingest the web rules:
+        // val webDocs = docService.getDocs(webRulesRtf)
+        // logger.info("Ingesting ${webDocs.size} web rule documents")
+        // vectorStore.accept(webDocs)
     }
 
     companion object {

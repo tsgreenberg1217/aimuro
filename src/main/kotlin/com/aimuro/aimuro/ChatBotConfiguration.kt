@@ -3,6 +3,7 @@ package com.aimuro.aimuro
 import org.springframework.ai.chat.client.ChatClient
 import org.springframework.ai.chat.client.advisor.api.BaseAdvisor
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor
+import org.springframework.ai.chat.model.ChatModel
 import org.springframework.ai.chat.prompt.PromptTemplate
 import org.springframework.ai.vectorstore.SearchRequest
 import org.springframework.ai.vectorstore.VectorStore
@@ -33,26 +34,32 @@ val compPromptTemplate = PromptTemplate(
 @Qualifier
 annotation class ComprehensiveRulesAdvisor
 
+@Qualifier
+annotation class DefaultComprehensiveRulesAdvisor
+
 @Configuration
 class ChatBotConfiguration {
 
-
     @Bean
-    @ComprehensiveRulesAdvisor
-    fun getSmallCompRulesAdvisor(
-        vectorStore: VectorStore
-    ): BaseAdvisor {
-        val advisor = QuestionAnswerAdvisor.builder(vectorStore)
+    @DefaultComprehensiveRulesAdvisor
+    fun getDefaultAdvisor(vectorStore: VectorStore): QuestionAnswerAdvisor =
+        QuestionAnswerAdvisor.builder(vectorStore)
             .searchRequest(
                 SearchRequest.builder()
-                    .topK(6)
+                    .topK(4)
                     .similarityThreshold(.75)
                     .build()
             )
             .promptTemplate(generalPromptTemplate)
             .build()
-        return GundamAdvisor(advisor)
-    }
+
+    @Bean
+    @ComprehensiveRulesAdvisor
+    fun getComprehensiveRulesAdvisor(
+        @DefaultComprehensiveRulesAdvisor defaultAdvisor: QuestionAnswerAdvisor,
+        vectorStore: VectorStore,
+        chatModel: ChatModel
+    ): BaseAdvisor = GundamAdvisor(defaultAdvisor, chatModel, vectorStore, generalPromptTemplate)
 
     @Bean
     fun aimuroChatClient(

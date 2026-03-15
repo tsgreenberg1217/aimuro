@@ -16,18 +16,23 @@ class GundamAdvisor(
     private val chatModel: ChatModel,
     private val vectorStore: VectorStore,
     private val promptTemplate: PromptTemplate,
-    private val similarityThreshold: Double = 0.75
+    private val similarityThreshold: Double = 0.6
 ) : BaseAdvisor by advisor {
+
+    private val simpleK = 6
+    private val moderateK = 10
+    private val inDepthK = 16
+
 
     override fun before(chatClientRequest: ChatClientRequest, advisorChain: AdvisorChain): ChatClientRequest {
         val query = extractUserQuery(chatClientRequest)
-        val k = if (query != null) classifyQuestionDepth(query) else 4
+        val k = if (query != null) classifyQuestionDepth(query) else moderateK
 
         val dynamicAdvisor = QuestionAnswerAdvisor.builder(vectorStore)
             .searchRequest(
                 SearchRequest.builder()
                     .topK(k)
-                    .similarityThreshold(.6)
+                    .similarityThreshold(similarityThreshold)
                     .build()
             )
             .promptTemplate(promptTemplate)
@@ -47,16 +52,16 @@ class GundamAdvisor(
     private fun classifyQuestionDepth(query: String): Int {
         val classificationPrompt = Prompt(
             "Classify the depth of this Gundam TCG rules question. " +
-            "Reply with ONLY one word — SIMPLE, MODERATE, or IN_DEPTH. " +
-            "SIMPLE = basic factual lookup. MODERATE = requires some rule knowledge. IN_DEPTH = complex multi-rule interaction. " +
-            "Question: $query"
+                    "Reply with ONLY one word — SIMPLE, MODERATE, or IN_DEPTH. " +
+                    "SIMPLE = basic factual lookup. MODERATE = requires some rule knowledge. IN_DEPTH = complex multi-rule interaction. " +
+                    "Question: $query"
         )
         val response = chatModel.call(classificationPrompt)
         val classification = response.result?.output?.text?.trim()?.uppercase() ?: "MODERATE"
         val k = when {
-            classification.contains("SIMPLE") -> 2
-            classification.contains("IN_DEPTH") || classification.contains("INDEPTH") -> 6
-            else -> 4
+            classification.contains("SIMPLE") -> simpleK
+            classification.contains("IN_DEPTH") || classification.contains("INDEPTH") -> inDepthK
+            else -> moderateK
         }
         println("GundamAdvisor: Classified as '$classification', using K=$k")
         return k

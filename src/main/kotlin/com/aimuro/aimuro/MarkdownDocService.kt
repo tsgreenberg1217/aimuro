@@ -20,62 +20,43 @@ class MarkdownDocService : DocService {
         val lines = resource.inputStream.bufferedReader().readLines()
         val documents = mutableListOf<Document>()
 
-        var currentTitle: String? = null
-        var currentSectionNum: Int? = null
+        // Three-level heading hierarchy: ## > #### > #####
+        // Each level change flushes the accumulated content as its own document,
+        // so e.g. "##### 13-1-7. <Suppression>" becomes its own embedded chunk
+        // with the full breadcrumb "13) Keyword Effects > 13-1. Keyword Effects > 13-1-7. <Suppression>".
+        var h2: String? = null
+        var h4: String? = null
+        var h5: String? = null
         var currentLines = mutableListOf<String>()
-        var sectionIndex = 0
 
-        fun flushSection() {
-            val title = currentTitle ?: return
-            val content = currentLines.joinToString("\n").trim()
-            if (content.isBlank()) return
-
-            val keywords = extractKeywords(content)
-            val sectionNum = currentSectionNum ?: sectionIndex
-
-            // PARENT: The section document is the logical parent. Its text has the section
-            // title prepended so that when the splitter breaks it into child chunks, each
-            // child's text begins with — or at minimum was derived from — this header context.
-            // This is how the hierarchy is preserved: the title travels into every child.
-            val textWithHeader = "Gundam Card Game Rules — $title\n\n$content"
-            val sectionDoc = Document.builder()
-                .text(textWithHeader)
-                .metadata("title", title)
-                .metadata("section", sectionNum)
-                .metadata("keywords", keywords.joinToString(","))
-                .metadata("source", resource.filename.orEmpty())
-                .build()
-
-            // CHILDREN: The splitter breaks the parent document into token-bounded chunks.
-            // Each child inherits the parent's metadata (title, section, keywords, source)
-            // via chunk.metadata, establishing the parent-child link. chunk_index and
-            // chunk_total are added so consumers know where a chunk sits within its section.
-            val chunks = splitter.apply(listOf(sectionDoc))
-            chunks.forEachIndexed { i, chunk ->
-                documents.add(
-                    Document.builder()
-                        .text(chunk.text)       // child text — a token-bounded slice of the parent
-                        .metadata(chunk.metadata) // inherited from parent: title, section, keywords, source
-                        .metadata("chunk_index", i)
-                        .metadata("chunk_total", chunks.size)
-                        .build()
-                )
-            }
-        }
+        fun leafTitle() = h5 ?: h4 ?: h2
+        fun breadcrumb() = listOfNotNull(h2, h4, h5).joinToString(" > ")
 
         for (line in lines) {
-            if (line.trimStart().startsWith("## ")) {
-                flushSection()
-                sectionIndex++
-                currentTitle = line.trimStart().removePrefix("## ").trim()
-                // Extract leading section number if present, e.g. "8) Attacking and Battles" → 8
-                currentSectionNum = Regex("""^(\d+)[).]""").find(currentTitle!!)?.groupValues?.get(1)?.toIntOrNull()
-                currentLines = mutableListOf()
-            } else if (currentTitle != null) {
-                currentLines.add(line)
+            val trimmed = line.trimStart()
+            when {
+                trimmed.startsWith("## ") -> {
+                    flushSection(resource, leafTitle(), breadcrumb(), h2, currentLines, documents)
+                    h2 = trimmed.removePrefix("## ").trim()
+                    h4 = null
+                    h5 = null
+                    currentLines = mutableListOf()
+                }
+                trimmed.startsWith("#### ") && h2 != null -> {
+                    flushSection(resource, leafTitle(), breadcrumb(), h2, currentLines, documents)
+                    h4 = trimmed.removePrefix("#### ").trim()
+                    h5 = null
+                    currentLines = mutableListOf()
+                }
+                trimmed.startsWith("##### ") && h2 != null -> {
+                    flushSection(resource, leafTitle(), breadcrumb(), h2, currentLines, documents)
+                    h5 = trimmed.removePrefix("##### ").trim()
+                    currentLines = mutableListOf()
+                }
+                leafTitle() != null -> currentLines.add(line)
             }
         }
-        flushSection()
+        flushSection(resource, leafTitle(), breadcrumb(), h2, currentLines, documents)
 
         // Add a routing/index chunk listing all sections — used for broad queries
         val indexText = buildIndexChunk(documents)
@@ -90,6 +71,48 @@ class MarkdownDocService : DocService {
         )
 
         return documents
+    }
+
+    private fun flushSection(
+        resource: Resource,
+        title: String?,
+        breadcrumb: String,
+        h2Title: String?,
+        currentLines: List<String>,
+        documents: MutableList<Document>,
+    ) {
+        title ?: return
+        val content = currentLines.joinToString("\n").trim()
+        if (content.isBlank()) return
+
+        val keywords = extractKeywords(content)
+        // Section number comes from the ## header (e.g. "8) Attacking and Battles" → 8)
+        val sectionNum = h2Title?.let { Regex("""^(\d+)[).]""").find(it)?.groupValues?.get(1)?.toIntOrNull() } ?: 0
+
+        val titlePrefix = "Gundam Card Game Rules — $breadcrumb\n\n"
+        val sectionDoc = Document.builder()
+            .text("$titlePrefix$content")
+            .metadata("title", title)
+            .metadata("section", sectionNum)
+            .metadata("keywords", keywords.joinToString(","))
+            .metadata("source", resource.filename.orEmpty())
+            .build()
+
+        // For most fine-grained chunks (##### level) the content will be well under 400 tokens
+        // and the splitter will return it as-is. The splitter only activates for genuinely long
+        // sections (e.g. large ## or #### blocks without finer headings).
+        val chunks = splitter.apply(listOf(sectionDoc))
+        chunks.forEachIndexed { i, chunk ->
+            val text = if (chunk.text.orEmpty().startsWith(titlePrefix)) chunk.text else "$titlePrefix${chunk.text}"
+            documents.add(
+                Document.builder()
+                    .text(text)
+                    .metadata(chunk.metadata)
+                    .metadata("chunk_index", i)
+                    .metadata("chunk_total", chunks.size)
+                    .build()
+            )
+        }
     }
 
     /**

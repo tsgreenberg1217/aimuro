@@ -14,7 +14,6 @@ class IngestionService(
     val vectorStore: VectorStore,
     @Qualifier("markdownDocService") val docService: DocService,
     @Value("classpath:/docs/gundam_card_game_comprehensive_rules_v1_5_0.md") val comprehensiveRules: Resource,
-    @Value("classpath:/docs/gunam_rules_web.rtf") val webRulesRtf: Resource,
 ) : CommandLineRunner {
 
     override fun run(vararg args: String?) {

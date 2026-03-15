@@ -529,8 +529,7 @@
  ##### 13-2-1. 【Activate･Main】
  ###### 13-2-1-1. 【Activate･Main】 is the keyword for an activated effect (see 9-1-7) that can only be activated during your main phase while the Unit is not attacking. “【Activate･Main】 (condition)：(text)” means you may fulfill the condition (condition) during your main phase. If you do, perform (text).
  ##### 13-2-2. 【Activate･Action】
- ###### 13-2-2-1. 【Activate･Action】 is the keyword for an activated effect (see 9-1-
- ## 7) that can only be activated during action steps. “【Activate･Action】 29 (condition)：(text)” means you may fulfill the condition (condition) during an action step. If you do, perform (text).
+ ###### 13-2-2-1. 【Activate･Action】 is the keyword for an activated effect (see 9-1-7) that can only be activated during action steps. “【Activate･Action】 29 (condition)：(text)” means you may fulfill the condition (condition) during an action step. If you do, perform (text).
  ##### 13-2-3. 【Main】
  ###### 13-2-3-1. 【Main】 is the keyword for a command effect found only on Command cards that can be activated by playing the card during your main phase while no Units are attacking.
  ###### 13-2-3-2. Some effects list 【Main】 and 【Action】 together. In this case, the effect can be activated at either time.

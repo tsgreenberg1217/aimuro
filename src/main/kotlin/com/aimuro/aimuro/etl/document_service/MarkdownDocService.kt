@@ -1,5 +1,6 @@
-package com.aimuro.aimuro
+package com.aimuro.aimuro.etl.document_service
 
+import com.aimuro.aimuro.etl.DocService
 import org.springframework.ai.document.Document
 import org.springframework.ai.transformer.splitter.TokenTextSplitter
 import org.springframework.core.io.Resource

@@ -1,4 +1,4 @@
-package com.aimuro.aimuro
+package com.aimuro.aimuro.etl
 
 import org.slf4j.LoggerFactory
 import org.springframework.ai.vectorstore.VectorStore
@@ -7,7 +7,6 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.CommandLineRunner
 import org.springframework.core.io.Resource
 import org.springframework.stereotype.Component
-
 
 @Component
 class IngestionService(

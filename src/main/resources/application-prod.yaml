@@ -1,0 +1,6 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://pgvector:5432/gundam-tcg-rules
+    username: user
+    password: password
+    host-auth-method: trust

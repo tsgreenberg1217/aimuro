@@ -1,6 +1,6 @@
-package com.aimuro.aimuro.card
+package com.aimuro.aimuro.model.card
 
-data class CardDto(
+data class CardResponse(
     val id: String?,
     val code: String?,
     val rarity: String?,

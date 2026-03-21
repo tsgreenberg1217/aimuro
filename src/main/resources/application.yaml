@@ -4,23 +4,22 @@ gundam:
       url: http://localhost:8081/graphql
 
 spring:
+  profiles:
+    active: prod
   threads:
     virtual:
       enabled: true
-  profiles:
-    active: debug
   application:
     name: aimuro
-  datasource:
-    url: jdbc:postgresql://localhost:5432/gundam-tcg-rules
-    username: user
-    password: password
-    host-auth-method: trust
+#  datasource:
+#    url: jdbc:postgresql://localhost:5432/gundam-tcg-rules
+#    username: user
+#    password: password
+#    host-auth-method: trust
   ai:
     vectorstore:
       pgvector:
         initialize-schema: true
     openai:
-#      api-key: ${OPENAI_API_KEY}
-      api-key: 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
+      api-key: ${OPEN_AI_KEY}
       model: o4-mini

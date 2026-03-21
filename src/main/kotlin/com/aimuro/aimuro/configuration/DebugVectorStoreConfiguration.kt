@@ -1,4 +1,4 @@
-package com.aimuro.aimuro
+package com.aimuro.aimuro.configuration
 
 import org.springframework.ai.embedding.EmbeddingModel
 import org.springframework.ai.vectorstore.SimpleVectorStore

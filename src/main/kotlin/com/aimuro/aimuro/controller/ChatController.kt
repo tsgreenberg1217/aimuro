@@ -1,5 +1,6 @@
-package com.aimuro.aimuro
+package com.aimuro.aimuro.controller
 
+import com.aimuro.aimuro.configuration.promptTemplate
 import org.springframework.ai.chat.client.ChatClient
 import org.springframework.ai.chat.messages.AssistantMessage
 import org.springframework.ai.chat.messages.Message

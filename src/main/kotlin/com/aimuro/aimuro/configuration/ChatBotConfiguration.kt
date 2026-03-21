@@ -1,5 +1,6 @@
-package com.aimuro.aimuro
+package com.aimuro.aimuro.configuration
 
+import com.aimuro.aimuro.chat_advisor.GundamAdvisor
 import org.springframework.ai.chat.client.ChatClient
 import org.springframework.ai.chat.client.advisor.api.BaseAdvisor
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor

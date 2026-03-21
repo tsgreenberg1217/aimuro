@@ -1,6 +1,7 @@
-package com.aimuro.aimuro
+package com.aimuro.aimuro.etl.document_service
 
-import com.aimuro.aimuro.IngestionService.Companion.logger
+import com.aimuro.aimuro.etl.DocService
+import com.aimuro.aimuro.etl.IngestionService.Companion.logger
 import org.springframework.ai.document.Document
 import org.springframework.ai.document.id.RandomIdGenerator
 import org.springframework.ai.reader.tika.TikaDocumentReader

@@ -1,5 +1,7 @@
-package com.aimuro.aimuro.card
+package com.aimuro.aimuro.client
 
+import com.aimuro.aimuro.model.card.CardResponse
+import com.aimuro.aimuro.model.card.CardFilterQuery
 import org.springframework.graphql.client.HttpSyncGraphQlClient
 import org.springframework.stereotype.Service
 
@@ -8,17 +10,17 @@ class GundamCardGraphQlClient(
     private val graphQlClient: HttpSyncGraphQlClient,
 ) : GundamCardService {
 
-    override fun findCards(filter: CardFilter): List<CardDto> =
+    override fun findCards(filter: CardFilterQuery): List<CardResponse> =
         graphQlClient
             .documentName("findCards")
             .variable("filter", filter)
             .retrieveSync("cards")
-            .toEntityList(CardDto::class.java)
+            .toEntityList(CardResponse::class.java)
 
-    override fun findCard(name: String): List<CardDto> =
+    override fun findCard(name: String): List<CardResponse> =
         graphQlClient
             .documentName("findCard")
             .variable("name", name)
             .retrieveSync("cards")
-            .toEntityList(CardDto::class.java)
+            .toEntityList(CardResponse::class.java)
 }

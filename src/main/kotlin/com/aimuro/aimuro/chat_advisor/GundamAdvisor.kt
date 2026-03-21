@@ -1,4 +1,4 @@
-package com.aimuro.aimuro
+package com.aimuro.aimuro.chat_advisor
 
 import org.springframework.ai.chat.client.ChatClientRequest
 import org.springframework.ai.chat.client.advisor.api.AdvisorChain

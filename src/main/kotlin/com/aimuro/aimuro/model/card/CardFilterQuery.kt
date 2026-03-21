@@ -1,6 +1,6 @@
-package com.aimuro.aimuro.card
+package com.aimuro.aimuro.model.card
 
-data class CardFilter(
+data class CardFilterQuery(
     val level: String? = null,
     val cost: String? = null,
     val color: String? = null,

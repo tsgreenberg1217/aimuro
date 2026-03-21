@@ -1,5 +1,6 @@
 package com.aimuro.aimuro.configuration
 
+import com.aimuro.aimuro.chat_advisor.CardServiceAdvisor
 import com.aimuro.aimuro.chat_advisor.GundamAdvisor
 import com.aimuro.aimuro.tools.CardToolService
 import org.springframework.ai.chat.client.ChatClient
@@ -12,6 +13,7 @@ import org.springframework.ai.vectorstore.VectorStore
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.context.annotation.Primary
 
 
 val promptTemplate = PromptTemplate(
@@ -19,8 +21,7 @@ val promptTemplate = PromptTemplate(
             "Given the context and provided history information and not prior knowledge,\nreply to the user comment. " +
             "Dont overwhelm the user with too much information unless they ask for a more detailed answer. " +
             "Look for explicit text that says it requires conditions. If no such text is found in the retrieved excerpts, do not assume it is prohibited by default. " +
-            "If the answer is not in the context, inform\nthe user that you can't answer the question.\n" +
-            "If the user mentions a specific card name or asks about a category of cards, use the available tools to look up card data before answering.\n"
+            "If the answer is not in the context, inform\nthe user that you can't answer the question.\n"
 )
 
 
@@ -29,52 +30,63 @@ val generalPromptTemplate = PromptTemplate(
             "---------------------\n\n---------------------\n{question_answer_context}\n---------------------\n\n"
 )
 
-val compPromptTemplate = PromptTemplate(
-    "{query}\n\nUse this information as well. " +
-            "---------------------\n\n---------------------\n{question_answer_context}\n---------------------\n\n"
+val rulesAdvisorPrompt = PromptTemplate(
+    "Use the question and any supplied card data below to query the Gundam TCG rules database. " +
+            "The retrieved rules excerpts should be relevant to both the question being asked and any card information provided. " +
+            "If card data is present, factor in that card's specific attributes (type, level, cost, color, traits, effect, etc) when determining which rules apply.\n\n" +
+            "{query}\n\n" +
+            "---------------------\n" +
+            "Rules Context:\n" +
+            "{question_answer_context}\n" +
+            "---------------------\n\n"
 )
 
 @Qualifier
 annotation class ComprehensiveRulesAdvisor
 
 @Qualifier
-annotation class DefaultComprehensiveRulesAdvisor
+annotation class CardEnrichmentAdvisor
+
+@Qualifier
+annotation class CardServiceLLMToolClient
 
 @Configuration
 class ChatBotConfiguration {
 
     @Bean
-    @DefaultComprehensiveRulesAdvisor
-    fun getDefaultAdvisor(vectorStore: VectorStore): QuestionAnswerAdvisor =
-        QuestionAnswerAdvisor.builder(vectorStore)
-            .searchRequest(
-                SearchRequest.builder()
-                    .topK(4)
-                    .similarityThreshold(.75)
-                    .build()
-            )
-            .promptTemplate(generalPromptTemplate)
-            .build()
-
-    @Bean
     @ComprehensiveRulesAdvisor
     fun getComprehensiveRulesAdvisor(
-        @DefaultComprehensiveRulesAdvisor defaultAdvisor: QuestionAnswerAdvisor,
         vectorStore: VectorStore,
         chatModel: ChatModel
-    ): BaseAdvisor = GundamAdvisor(defaultAdvisor, chatModel, vectorStore, generalPromptTemplate)
+    ): BaseAdvisor = GundamAdvisor(chatModel, vectorStore, rulesAdvisorPrompt)
 
     @Bean
+    @CardServiceLLMToolClient
+    fun cardServiceLLMToolClient(
+        chatClientBuilder: ChatClient.Builder,
+        cardToolService: CardToolService
+    ): ChatClient = chatClientBuilder
+        .defaultTools(cardToolService)
+        .build()
+
+    @Bean
+    @CardEnrichmentAdvisor
+    fun cardEnrichmentAdvisor(
+        @CardServiceLLMToolClient cardServiceLLMToolClient: ChatClient
+    ): BaseAdvisor = CardServiceAdvisor(cardServiceLLMToolClient)
+
+    @Bean
+    @Primary
     fun aimuroChatClient(
         chatClientBuilder: ChatClient.Builder,
+        @CardEnrichmentAdvisor cardEnrichmentAdvisor: BaseAdvisor,
         @ComprehensiveRulesAdvisor smallComprehensiveRulesAdvisor: BaseAdvisor,
-        cardToolService: CardToolService
     ): ChatClient {
         return chatClientBuilder
             .defaultAdvisors(
+                cardEnrichmentAdvisor,
                 smallComprehensiveRulesAdvisor,
             )
-            .defaultTools(cardToolService)
             .build()
     }
 }

@@ -1,6 +1,7 @@
 package com.aimuro.aimuro.chat_advisor
 
 import org.springframework.ai.chat.client.ChatClientRequest
+import org.springframework.ai.chat.client.ChatClientResponse
 import org.springframework.ai.chat.client.advisor.api.AdvisorChain
 import org.springframework.ai.chat.client.advisor.api.BaseAdvisor
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor
@@ -12,12 +13,11 @@ import org.springframework.ai.vectorstore.SearchRequest
 import org.springframework.ai.vectorstore.VectorStore
 
 class GundamAdvisor(
-    private val advisor: QuestionAnswerAdvisor,
     private val chatModel: ChatModel,
     private val vectorStore: VectorStore,
     private val promptTemplate: PromptTemplate,
     private val similarityThreshold: Double = 0.6
-) : BaseAdvisor by advisor {
+) : BaseAdvisor {
 
     private val simpleK = 6
     private val moderateK = 10
@@ -43,6 +43,11 @@ class GundamAdvisor(
         return mutatedRequest
     }
 
+    override fun after(
+        chatClientResponse: ChatClientResponse,
+        advisorChain: AdvisorChain
+    ): ChatClientResponse = chatClientResponse
+
     private fun extractUserQuery(chatClientRequest: ChatClientRequest): String? =
         chatClientRequest.prompt().instructions
             .filterIsInstance<UserMessage>()
@@ -66,4 +71,6 @@ class GundamAdvisor(
         println("GundamAdvisor: Classified as '$classification', using K=$k")
         return k
     }
+
+    override fun getOrder(): Int = BaseAdvisor.HIGHEST_PRECEDENCE + 1
 }

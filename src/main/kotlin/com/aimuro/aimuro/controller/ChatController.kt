@@ -29,8 +29,8 @@ class ChatController(
     private val chatClient: ChatClient
 ) {
 
-    @PostMapping("/rules")
-    fun getRules(@RequestBody request: ChatRequest): RulesResponse = sendAimuroRequest(request)
+    @PostMapping("/ask")
+    fun ask(@RequestBody request: ChatRequest): RulesResponse = sendAimuroRequest(request)
         .call()
         .run { content() ?: "Try asking the question in a different way" }
         .run(::RulesResponse)

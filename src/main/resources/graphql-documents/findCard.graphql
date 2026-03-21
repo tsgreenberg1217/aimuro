@@ -1,5 +1,5 @@
-query FindCard($name: String) {
-    cards(name: $name) {
+query FindCard($name: String!) {
+    cards: getCard(name: $name) {
         id
         code
         rarity

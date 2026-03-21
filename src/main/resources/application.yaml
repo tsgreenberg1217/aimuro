@@ -5,7 +5,7 @@ gundam:
 
 spring:
   profiles:
-    active: prod
+    active: debug
   threads:
     virtual:
       enabled: true

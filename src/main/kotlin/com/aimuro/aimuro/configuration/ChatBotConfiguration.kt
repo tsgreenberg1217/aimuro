@@ -1,6 +1,7 @@
 package com.aimuro.aimuro.configuration
 
 import com.aimuro.aimuro.chat_advisor.GundamAdvisor
+import com.aimuro.aimuro.tools.CardToolService
 import org.springframework.ai.chat.client.ChatClient
 import org.springframework.ai.chat.client.advisor.api.BaseAdvisor
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor
@@ -18,7 +19,8 @@ val promptTemplate = PromptTemplate(
             "Given the context and provided history information and not prior knowledge,\nreply to the user comment. " +
             "Dont overwhelm the user with too much information unless they ask for a more detailed answer. " +
             "Look for explicit text that says it requires conditions. If no such text is found in the retrieved excerpts, do not assume it is prohibited by default. " +
-            "If the answer is not in the context, inform\nthe user that you can't answer the question.\n"
+            "If the answer is not in the context, inform\nthe user that you can't answer the question.\n" +
+            "If the user mentions a specific card name or asks about a category of cards, use the available tools to look up card data before answering.\n"
 )
 
 
@@ -65,12 +67,14 @@ class ChatBotConfiguration {
     @Bean
     fun aimuroChatClient(
         chatClientBuilder: ChatClient.Builder,
-        @ComprehensiveRulesAdvisor smallComprehensiveRulesAdvisor: BaseAdvisor
+        @ComprehensiveRulesAdvisor smallComprehensiveRulesAdvisor: BaseAdvisor,
+        cardToolService: CardToolService
     ): ChatClient {
         return chatClientBuilder
             .defaultAdvisors(
                 smallComprehensiveRulesAdvisor,
             )
+            .defaultTools(cardToolService)
             .build()
     }
 }

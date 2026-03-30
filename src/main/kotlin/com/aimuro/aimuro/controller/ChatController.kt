@@ -29,13 +29,13 @@ class ChatController(
     private val chatClient: ChatClient
 ) {
 
-    @PostMapping("/ask")
+    @PostMapping("/askNoStream")
     fun ask(@RequestBody request: ChatRequest): RulesResponse = sendAimuroRequest(request)
         .call()
         .run { content() ?: "Try asking the question in a different way" }
         .run(::RulesResponse)
 
-    @PostMapping("/rulesStream")
+    @PostMapping("/ask")
     fun getRulesStream(@RequestBody request: ChatRequest): Flux<RulesResponse> = sendAimuroRequest(request)
         .stream()
         .content()

@@ -94,15 +94,6 @@ POST /rulesStream  → Server-Sent Events
 ```bash
 # Full stack (Docker)
 ./aimuro-build.sh
-# or
-docker build -t aimuro-service .
-docker-compose up -d
-
-# Local dev (no database required)
-./gradlew bootRun --args='--spring.profiles.active=debug'
-
-# Tests
-./gradlew test
 ```
 
 App runs on `localhost:8080` (local) or `localhost:8000` (Docker).

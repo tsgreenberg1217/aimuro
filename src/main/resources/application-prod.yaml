@@ -1,6 +1,25 @@
 spring:
   datasource:
-    url: jdbc:postgresql://pgvector:5432/gundam-tcg-rules
-    username: user
+    url: jdbc:postgresql://postgres:5432/aimuro-app
+    username: postgres
     password: password
-    host-auth-method: trust
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  jpa:
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        logging:
+          ddl: DEBUG
+          sql: DEBUG
+    hibernate:
+      ddl-auto: update
+
+app:
+  pgvector:
+    datasource:
+      url: jdbc:postgresql://pgvector:5432/gundam-tcg-rules
+      username: postgres
+      password: password

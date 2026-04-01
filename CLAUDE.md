@@ -28,7 +28,7 @@ docker-compose up -d
 ./gradlew test
 
 # Run a single test
-./gradlew test --tests "com.aimuro.aimuro.YourTestClass.yourTestMethod"
+./gradlew test --tests "com.aimuro.YourTestClass.yourTestMethod"
 ```
 
 The app runs on port 8080 locally, mapped to port 8000 in Docker.

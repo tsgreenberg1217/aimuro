@@ -2,12 +2,14 @@ package com.aimuro.configuration
 
 import com.aimuro.history.ChatResponse
 import com.aimuro.history.Conversation
+import com.aimuro.repository.ConversationRepository
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.orm.jpa.EntityManagerFactoryBuilder
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.context.annotation.Primary
 import org.springframework.context.annotation.Profile
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories
 import org.springframework.jdbc.core.JdbcTemplate
@@ -21,6 +23,17 @@ import javax.sql.DataSource
 @Configuration
 @Profile("!debug")
 class ConversationJpaConfiguration {
+
+    @Bean("vectorDataSourceProperties")
+    @Primary
+    @ConfigurationProperties("spring.datasource")
+    fun vectorDataSourceProperties(): DataSourceProperties = DataSourceProperties()
+
+    @Bean("dataSource")
+    @Primary
+    fun vectorDataSource(
+        @Qualifier("vectorDataSourceProperties") vectorDataSourceProperties: DataSourceProperties,
+    ): DataSource = vectorDataSourceProperties.initializeDataSourceBuilder().build()
 
     @Bean("conversationDataSourceProperties")
     @ConfigurationProperties("app.conversation.datasource")
@@ -38,19 +51,19 @@ class ConversationJpaConfiguration {
 @Configuration
 @EnableTransactionManagement
 @EnableJpaRepositories(
-    basePackageClasses = [Conversation::class],
+    basePackageClasses = [ConversationRepository::class],
     entityManagerFactoryRef = "conversationEntityManagerFactory",
     transactionManagerRef = "conversationTransactionManager"
 )
 class ConvoJpaConfiguration {
     @Bean("conversationEntityManagerFactory")
     fun conversationEntityManagerFactory(
-        @Qualifier("conversationDataSource") dataSource: DataSource?,
+        @Qualifier("conversationDataSource") dataSource: DataSource,
         builder: EntityManagerFactoryBuilder
     ): LocalContainerEntityManagerFactoryBean {
         return builder
             .dataSource(dataSource)
-            .packages(Conversation::class.java)
+            .packages(Conversation::class.java, ChatResponse::class.java)
             .build()
     }
 
@@ -59,35 +72,5 @@ class ConvoJpaConfiguration {
         @Qualifier("conversationEntityManagerFactory") conversationEntityManagerFactory: LocalContainerEntityManagerFactoryBean
     ): PlatformTransactionManager {
         return JpaTransactionManager(conversationEntityManagerFactory.getObject()!!)
-    }
-}
-
-
-
-
-@Configuration
-@EnableTransactionManagement
-@EnableJpaRepositories(
-    basePackageClasses = [ChatResponse::class],
-    entityManagerFactoryRef = "chatResponseEntityManagerFactory",
-    transactionManagerRef = "chatResponseTransactionManager"
-)
-class ChatResponseJpaConfiguration {
-    @Bean("chatResponseEntityManagerFactory")
-    fun chatResponseEntityManagerFactory(
-        @Qualifier("conversationDataSource") dataSource: DataSource?,
-        builder: EntityManagerFactoryBuilder
-    ): LocalContainerEntityManagerFactoryBean {
-        return builder
-            .dataSource(dataSource)
-            .packages(ChatResponse::class.java)
-            .build()
-    }
-
-    @Bean
-    fun chatResponseTransactionManager(
-        @Qualifier("chatResponseEntityManagerFactory") chatResponseEntityManagerFactory: LocalContainerEntityManagerFactoryBean
-    ): PlatformTransactionManager {
-        return JpaTransactionManager(chatResponseEntityManagerFactory.getObject()!!)
     }
 }

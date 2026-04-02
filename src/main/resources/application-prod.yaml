@@ -10,6 +10,6 @@ spring:
 app:
   conversation:
     datasource:
-      url: jdbc:postgresql://postgres:5433/aimuro-app
+      url: jdbc:postgresql://postgres:5432/aimuro-app
       username: postgres
       password: password

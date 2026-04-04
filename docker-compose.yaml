@@ -1,13 +1,28 @@
 version: "3.8"
 
 services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+
+  postgres:
+    image: postgres:latest
+    environment:
+      - 'POSTGRES_DB=aimuro-app'
+      - 'POSTGRES_USER=postgres'
+      - 'POSTGRES_PASSWORD=password'
+      - 'POSTGRES_HOST_AUTH_METHOD=trust'
+    ports:
+      - '5433:5432'
+
   pgvector:
     security_opt:
       - seccomp:unconfined
-    image: 'pgvector/pgvector:pg16'
+    image: 'pgvector/pgvector:pg18'
     environment:
       - 'POSTGRES_DB=gundam-tcg-rules'
-      - 'POSTGRES_USER=user'
+      - 'POSTGRES_USER=postgres'
       - 'POSTGRES_PASSWORD=password'
       - 'POSTGRES_HOST_AUTH_METHOD=trust'
     labels:
@@ -18,24 +33,27 @@ services:
   aimuro-service:
     security_opt:
       - seccomp:unconfined
-    image: aimuro-service
+    image: aimuro-service-test
     depends_on:
       pgvector:
         condition: service_started
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
 
     ports:
-        - "8000:8080"
+        - "8080:8080"
     environment:
-      SPRING_PROFILES_ACTIVE: k8
+      SPRING_PROFILES_ACTIVE: prod
       SPRING_DATASOURCE_URL: jdbc:postgresql://pgvector:5432/gundam-tcg-rules
-      SPRING_DATASOURCE_USERNAME: user
+      SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: password
-      SPRING_DATASOURCE_HOST_AUTH_METHOD: trust
+      APP_CONVERSATION_DATASOURCE_URL: jdbc:postgresql://postgres:5432/aimuro-app
+      APP_CONVERSATION_DATASOURCE_USERNAME: postgres
+      APP_CONVERSATION_DATASOURCE_PASSWORD: password
 
       SPRING_APPLICATION_NAME: aimuro
-      SPRING_JPA_PROPERTIES_HIBERNATE_LOGGING_DDL: DEBUG
-      SPRING_JPA_PROPERTIES_HIBERNATE_LOGGING_SQL: DEBUG
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
       SPRING_LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_HTTP_CONVERTER_JSON: DEBUG
       SPRING_LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB: DEBUG
       SPRING_LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: DEBUG
@@ -44,5 +62,7 @@ services:
       SPRING_LOGGING_LEVEL_COM_cardcom_REPOSITORY: DEBUG
       SPRING_LOGGING_LEVEL_COM_FASTERXML_JACKSON_DATABIND: DEBUG
       # AI_VECTORSTORE_PGVECTOR_INITIALIZE_SCHEMA: true
-      AI_OPENAI_API_KEY: ${OPEN_AI_KEY}
+      OPEN_AI_KEY: ${OPEN_AI_KEY}
       MODEL: o4-mini
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379

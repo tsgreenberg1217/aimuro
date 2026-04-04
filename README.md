@@ -31,18 +31,25 @@ The model decides autonomously whether card data is needed and which tool to inv
 
 Card lookups hit a live GraphQL API (`GundamCardGraphQlClient`) rather than a static snapshot, ensuring card text and attributes always reflect the current card database.
 
-### Streaming Responses
+### Resilient SSE Streaming
 
-The `/rulesStream` endpoint returns Server-Sent Events so the frontend can render answers token-by-token, matching the UX feel of modern AI assistants.
+Rather than piping the AI response directly to an SSE connection, AIMURO decouples generation from delivery using Redis Streams:
+
+1. `POST /ask` kicks off generation on a virtual thread and immediately opens an SSE connection backed by a Redis stream.
+2. Each response chunk is published to `stream:{requestId}` as it arrives. A `done=true` sentinel closes the consumer.
+3. If the client disconnects mid-stream, it can reconnect via `GET /ask/{requestId}/stream` — the stream is replayed from the beginning, and the 10-minute TTL on completed streams means late fetches still work.
+
+This means a dropped connection never loses a response.
 
 ### Production-Ready Infrastructure, Debug-Friendly Development
 
-| Mode | Vector Store | Database |
-|------|-------------|----------|
-| Default | PgVector (PostgreSQL + pgvector) | PostgreSQL pg16 |
-| `debug` profile | In-memory `SimpleVectorStore` | None required |
+| Mode | Vector Store | Conversation DB | Redis |
+|------|-------------|-----------------|-------|
+| `prod` (Docker) | PgVector (pgvector pg18) | PostgreSQL `aimuro-app` | Required |
+| Default (local) | PgVector | PostgreSQL | Required |
+| `debug` profile | In-memory `SimpleVectorStore` | None required | Not used |
 
-Spring profiles let engineers iterate locally without a running database. Docker Compose brings up the full stack — app + PostgreSQL — with a single command.
+Spring profiles let engineers iterate locally without a running database. Docker Compose brings up the full stack — app + pgvector + PostgreSQL + Redis — with a single command.
 
 ---
 
@@ -53,7 +60,9 @@ Spring profiles let engineers iterate locally without a running database. Docker
 | Runtime | Kotlin / Spring Boot |
 | AI Framework | Spring AI |
 | LLM | OpenAI `o4-mini` |
-| Vector Store | PostgreSQL + pgvector |
+| Vector Store | PostgreSQL + pgvector (pg18) |
+| Conversation History | PostgreSQL (JPA) |
+| Stream Buffer | Redis Streams |
 | Card Data | GraphQL API |
 | Containerization | Docker / Docker Compose |
 
@@ -62,7 +71,12 @@ Spring profiles let engineers iterate locally without a running database. Docker
 ## Architecture
 
 ```
-User Question
+POST /ask  (conversationId + conversation history)
+      │
+      ▼
+AimuroChatServiceImpl
+  └─ Spawns virtual thread for async generation
+  └─ Returns requestId + opens SSE via Redis stream
       │
       ▼
 CardServiceAdvisor (highest precedence)
@@ -80,11 +94,16 @@ GundamAdvisor
       │
       ▼
 OpenAI o4-mini
-  └─ Generates grounded answer
+  └─ Streams chunks → ChatStreamProducer → Redis stream:{requestId}
+  └─ On complete: saves to PostgreSQL, writes done sentinel, sets TTL
       │
       ▼
-POST /rules        → Single response
-POST /rulesStream  → Server-Sent Events
+ChatStreamConsumer
+  └─ Reads Redis stream (100ms poll)
+  └─ Terminates on done sentinel
+  └─ Emits final isComplete=true event to client
+
+GET /ask/{requestId}/stream  → Reconnect / replay from Redis
 ```
 
 ---
@@ -96,28 +115,36 @@ POST /rulesStream  → Server-Sent Events
 ./aimuro-build.sh
 ```
 
-App runs on `localhost:8080` (local) or `localhost:8000` (Docker).
+App runs on `localhost:8080` in both local and Docker.
 
 ---
 
 ## API
 
-Both endpoints accept a conversation history array to support multi-turn dialogue:
-
 ```bash
-POST /rules
-POST /rulesStream
-
+# Start a new question — returns SSE immediately
+POST /ask
 {
+  "conversationId": 1,
   "conversation": [
     { "role": "user",      "content": "Can my Gundam attack the turn it's played?" },
     { "role": "assistant", "content": "..." }
   ]
 }
+
+# Reconnect to an in-progress or completed stream
+GET /ask/{requestId}/stream
+
+# Get full conversation history
+GET /conversation/{conversationId}
+
+# Check stream status for a conversation
+GET /conversation/{conversationId}/status
 ```
-`/rulesStream` returns `text/event-stream` (SSE).
+
+Both `/ask` and `/ask/{requestId}/stream` return `text/event-stream`. Each event is a `RulesResponse` with `answer` (chunk) and `isComplete` (`true` on the final event).
 
 ## K8
-you can also use the gundamhub-k8 to run this as part of a cluster, but make sure to set the environment variables for the OpenAI API key and the database connection string.
+You can also use the gundamhub-k8 to run this as part of a cluster. Set `OPEN_AI_KEY`, `SPRING_DATASOURCE_URL`, `APP_CONVERSATION_DATASOURCE_URL`, `SPRING_DATA_REDIS_HOST`, and `SPRING_DATA_REDIS_PORT` as environment variables.
 
 

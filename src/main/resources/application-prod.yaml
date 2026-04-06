@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:postgresql://pgvector:5432/gundam-tcg-rules
+    url: jdbc:postgresql://pgvector:5432/gundam-tcg-rules-vector-db
     username: postgres
     password: password
   data:
@@ -10,6 +10,6 @@ spring:
 app:
   conversation:
     datasource:
-      url: jdbc:postgresql://postgres:5432/aimuro-app
+      url: jdbc:postgresql://postgres:5432/aimuro-conversation-db
       username: postgres
       password: password

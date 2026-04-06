@@ -9,7 +9,7 @@ services:
   postgres:
     image: postgres:latest
     environment:
-      - 'POSTGRES_DB=aimuro-app'
+      - 'POSTGRES_DB=aimuro-conversation-db'
       - 'POSTGRES_USER=postgres'
       - 'POSTGRES_PASSWORD=password'
       - 'POSTGRES_HOST_AUTH_METHOD=trust'
@@ -19,9 +19,9 @@ services:
   pgvector:
     security_opt:
       - seccomp:unconfined
-    image: 'pgvector/pgvector:pg18'
+    image: gundam-rules-vector-db
     environment:
-      - 'POSTGRES_DB=gundam-tcg-rules'
+      - 'POSTGRES_DB=gundam-tcg-rules-vector-db'
       - 'POSTGRES_USER=postgres'
       - 'POSTGRES_PASSWORD=password'
       - 'POSTGRES_HOST_AUTH_METHOD=trust'
@@ -46,10 +46,10 @@ services:
         - "8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: prod
-      SPRING_DATASOURCE_URL: jdbc:postgresql://pgvector:5432/gundam-tcg-rules
+      SPRING_DATASOURCE_URL: jdbc:postgresql://pgvector:5432/gundam-tcg-rules-vector-db
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: password
-      APP_CONVERSATION_DATASOURCE_URL: jdbc:postgresql://postgres:5432/aimuro-app
+      APP_CONVERSATION_DATASOURCE_URL: jdbc:postgresql://postgres:5432/aimuro-conversation-db
       APP_CONVERSATION_DATASOURCE_USERNAME: postgres
       APP_CONVERSATION_DATASOURCE_PASSWORD: password
 

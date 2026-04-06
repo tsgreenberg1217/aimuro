@@ -104,8 +104,8 @@ Both `/ask` and `/ask/{requestId}/stream` return `text/event-stream` (SSE). Each
 
 ## Infrastructure
 
-- **pgvector DB**: `pgvector/pgvector:pg18`, DB name `gundam-tcg-rules`, user `postgres`, port 5432
-- **Conversation DB**: `postgres:latest`, DB name `aimuro-app`, user `postgres`, port 5433 (host) → 5432 (container)
+- **pgvector DB**: `pgvector/pgvector:pg18`, DB name `gundam-tcg-rules-vector-db`, user `postgres`, port 5432
+- **Conversation DB**: `postgres:latest`, DB name `aimuro-conversation-db`, user `postgres`, port 5433 (host) → 5432 (container)
 - **Redis**: `redis:7-alpine`, port 6379 — used for response stream buffering and request state
 - **Docker port**: app maps `8080:8080` (changed from 8000)
 - **Active profile in Docker**: `prod`

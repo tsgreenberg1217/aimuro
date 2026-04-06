@@ -45,7 +45,7 @@ This means a dropped connection never loses a response.
 
 | Mode | Vector Store | Conversation DB | Redis |
 |------|-------------|-----------------|-------|
-| `prod` (Docker) | PgVector (pgvector pg18) | PostgreSQL `aimuro-app` | Required |
+| `prod` (Docker) | PgVector (pgvector pg18) | PostgreSQL `aimuro-conversation-db` | Required |
 | Default (local) | PgVector | PostgreSQL | Required |
 | `debug` profile | In-memory `SimpleVectorStore` | None required | Not used |
 

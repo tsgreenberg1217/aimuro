@@ -8,7 +8,7 @@ import org.springframework.boot.CommandLineRunner
 import org.springframework.core.io.Resource
 import org.springframework.stereotype.Component
 
-@Component
+@Component("debug")
 class IngestionService(
     val vectorStore: VectorStore,
     @Qualifier("markdownDocService") val docService: DocService,

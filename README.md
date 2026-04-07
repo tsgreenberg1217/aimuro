@@ -1,12 +1,15 @@
-# AIMURO
+# AiMURO
+<div>
+<img align="left" src="https://github.com/user-attachments/assets/1f428f2b-fa3f-4534-bc7f-d2935fd12b34" alt="aimuro" width="200">
+<h3>AI-powered rules assistant for the Gundam Trading Card Game.</h3>
 
-**AI-powered rules assistant for the Gundam Trading Card Game.**
+AiMURO answers natural-language rules questions with the accuracy of a tournament judge and the personality of a friendly anime robot. It combines semantic search over official rules documents with real-time card data retrieval, grounding every answer in authoritative source material.
 
-AIMURO answers natural-language rules questions with the accuracy of a tournament judge and the personality of a friendly anime robot. It combines semantic search over official rules documents with real-time card data retrieval — grounding every answer in authoritative source material rather than hallucinated training data.
+</div>
 
----
+<br></br>
 
-## Technical Highlights
+# Technical Highlights
 
 ### Multi-Stage Retrieval-Augmented Generation (RAG)
 
@@ -145,6 +148,6 @@ GET /conversation/{conversationId}/status
 Both `/ask` and `/ask/{requestId}/stream` return `text/event-stream`. Each event is a `RulesResponse` with `answer` (chunk) and `isComplete` (`true` on the final event).
 
 ## K8
-You can also use the gundamhub-k8 to run this as part of a cluster. Set `OPEN_AI_KEY`, `SPRING_DATASOURCE_URL`, `APP_CONVERSATION_DATASOURCE_URL`, `SPRING_DATA_REDIS_HOST`, and `SPRING_DATA_REDIS_PORT` as environment variables.
+You can also use the gundamhub-k8 to run this as part of a cluster. Set `OPEN_AI_KEY`, in your environment as your key from Open AI.
 
 

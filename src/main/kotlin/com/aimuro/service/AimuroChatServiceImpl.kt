@@ -44,7 +44,7 @@ class AimuroChatServiceImpl(
         return requestId
     }
 
-    override fun replay(requestId: String): Flux<RulesResponse> {
+    override fun subscribeToChat(requestId: String): Flux<RulesResponse> {
         logger.info("Received replay request for requestId: $requestId")
         val status = streamBufferService.getStatus(requestId)
         return when (status) {

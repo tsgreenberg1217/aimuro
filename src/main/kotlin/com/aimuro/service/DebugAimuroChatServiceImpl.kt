@@ -35,7 +35,7 @@ class DebugAimuroChatServiceImpl(
         return requestId
     }
 
-    override fun replay(requestId: String): Flux<RulesResponse> {
+    override fun subscribeToChat(requestId: String): Flux<RulesResponse> {
         if (!statusStore.containsKey(requestId)) return Flux.error(ResponseStatusException(HttpStatus.NOT_FOUND))
         return replayFromMemory(requestId)
     }

@@ -7,7 +7,7 @@ import reactor.core.publisher.Flux
 
 interface AimuroChatService {
     fun ask(request: ChatRequest): String
-    fun replay(requestId: String): Flux<RulesResponse>
+    fun subscribeToChat(requestId: String): Flux<RulesResponse>
     fun getHistory(conversationId: Long): List<ChatResponse>
     fun getConversationStatus(conversationId: String): Map<String, String>
 }

@@ -4,7 +4,6 @@ import com.aimuro.history.ChatResponse
 import com.aimuro.service.AimuroChatService
 import org.slf4j.LoggerFactory
 import org.springframework.http.MediaType
-import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -37,11 +36,11 @@ class ChatController(private val aimuroChatService: AimuroChatService) {
     @PostMapping("/ask", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
     fun ask(@RequestBody request: ChatRequest): Flux<RulesResponse> {
         logger.info("Received ask request for conversationId: ${request.conversationId}")
-        return with(aimuroChatService) { replay(ask(request)) }
+        return with(aimuroChatService) { subscribeToChat(ask(request)) }
     }
 
     @GetMapping("/ask/{requestId}/stream", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
-    fun stream(@PathVariable requestId: String): Flux<RulesResponse> = aimuroChatService.replay(requestId)
+    fun stream(@PathVariable requestId: String): Flux<RulesResponse> = aimuroChatService.subscribeToChat(requestId)
 
     @GetMapping("/conversation/{conversationId}")
     fun getConversationHistory(@PathVariable conversationId: Long): List<ChatResponse> =

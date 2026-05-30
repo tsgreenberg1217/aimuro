@@ -1,12 +1,9 @@
-query FindCard($name: String!) {
-    cards: getCard(name: $name) {
-        id
-        code
-        rarity
+query Cards($name: String!) {
+    cards(filter: { name: $name }) {
         name
-        effect
+        rarity
+        code
         level
-        cost
         color
         cardType
         zone
@@ -15,6 +12,5 @@ query FindCard($name: String!) {
         ap
         hp
         sourceTitle
-        getIt
     }
 }

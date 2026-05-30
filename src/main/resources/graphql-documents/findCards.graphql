@@ -1,12 +1,9 @@
-query FindCards($filter: CardFilter) {
+query Cards($filter: CardFilter) {
     cards(filter: $filter) {
-        id
-        code
-        rarity
         name
-        effect
+        rarity
+        code
         level
-        cost
         color
         cardType
         zone
@@ -15,6 +12,5 @@ query FindCards($filter: CardFilter) {
         ap
         hp
         sourceTitle
-        getIt
     }
 }

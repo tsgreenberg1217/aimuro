@@ -1,0 +1,8 @@
+spring:
+  ai:
+    model:
+      chat: openai
+      embedding: openai
+    openai:
+      api-key: ${OPEN_AI_KEY}
+      model: o4-mini

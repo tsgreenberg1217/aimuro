@@ -1,6 +1,5 @@
 package com.aimuro.service
 
-import com.aimuro.configuration.promptTemplate
 import com.aimuro.controller.ChatRequest
 import com.aimuro.controller.RulesResponse
 import com.aimuro.history.ChatResponse
@@ -46,11 +45,11 @@ class DebugAimuroChatServiceImpl(
         mapOf("status" to "idle")
 
     private fun generateAsync(requestId: String, request: ChatRequest) {
-        val messages = request.conversation.map { msg ->
+        val messages = request.conversation.dropLast(1).map { msg ->
             if (msg.role == "user") UserMessage(msg.content) else AssistantMessage(msg.content)
         }
         chatClient
-            .prompt(promptTemplate.template)
+            .prompt()
             .messages(messages)
             .user(request.conversation.last().content)
             .stream()

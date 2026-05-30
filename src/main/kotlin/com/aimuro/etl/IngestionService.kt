@@ -19,16 +19,20 @@ class IngestionService(
         // Split by H2 section — each section becomes one document with
         // title prepended and keyword metadata attached (see MarkdownDocService).
         // A routing index chunk is also appended automatically.
-//        val sectionDocs = docService.getDocs(comprehensiveRules)
-//
-//        logger.info("Ingesting ${sectionDocs.size} section documents from ${comprehensiveRules.filename}")
-//        vectorStore.accept(sectionDocs)
-//        logger.info("Ingestion complete.")
 
-        // Uncomment to also ingest the web rules:
-        // val webDocs = docService.getDocs(webRulesRtf)
-        // logger.info("Ingesting ${webDocs.size} web rule documents")
-        // vectorStore.accept(webDocs)
+
+        val sectionDocs = docService.getDocs(comprehensiveRules)
+//
+        logger.info("Ingesting ${sectionDocs.size} section documents from ${comprehensiveRules.filename}")
+        sectionDocs.forEach {
+            logger.info("Document id ${it.id}")
+            logger.info("title: ${it.metadata["title"]}")
+            logger.info("metadata: ${it.metadata["keywords"]}")
+            logger.info("text: ${it.text}")
+            logger.info("------------------------------")
+        }
+        vectorStore.accept(sectionDocs)
+        logger.info("Ingestion complete.")
     }
 
     companion object {

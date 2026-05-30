@@ -2,29 +2,22 @@ package com.aimuro.etl.document_service
 
 import com.aimuro.etl.DocService
 import org.springframework.ai.document.Document
-import org.springframework.ai.transformer.splitter.TokenTextSplitter
 import org.springframework.core.io.Resource
 import org.springframework.stereotype.Service
 
 @Service("markdownDocService")
 class MarkdownDocService : DocService {
 
-    private val splitter = TokenTextSplitter(
-        /* defaultChunkSize    */ 400,
-        /* minChunkSizeChars   */ 200,
-        /* minChunkLengthToEmbed */ 5,
-        /* maxNumChunks        */ 100,
-        /* keepSeparator       */ true,
-    )
-
     override fun getDocs(resource: Resource): List<Document> {
+
         val lines = resource.inputStream.bufferedReader().readLines()
         val documents = mutableListOf<Document>()
 
         // Three-level heading hierarchy: ## > #### > #####
-        // Each level change flushes the accumulated content as its own document,
-        // so e.g. "##### 13-1-7. <Suppression>" becomes its own embedded chunk
-        // with the full breadcrumb "13) Keyword Effects > 13-1. Keyword Effects > 13-1-7. <Suppression>".
+        // ###### and deeper lines are body content within their parent ##### chunk.
+        // Chunking at ##### level is critical for sections like keyword effects, where
+        // each ##### entry defines one concept (e.g. <Suppression>) — without it all
+        // keyword definitions merge into one chunk and semantic search breaks.
         var h2: String? = null
         var h4: String? = null
         var h5: String? = null
@@ -59,17 +52,25 @@ class MarkdownDocService : DocService {
         }
         flushSection(resource, leafTitle(), breadcrumb(), h2, currentLines, documents)
 
-        // Add a routing/index chunk listing all sections — used for broad queries
-        val indexText = buildIndexChunk(documents)
-        documents.add(
-            Document.builder()
-                .text(indexText)
-                .metadata("title", "Rules Index")
-                .metadata("section", 0)
-                .metadata("keywords", "index,overview,sections,contents,rules")
-                .metadata("source", resource.filename.orEmpty())
-                .build()
-        )
+        // Add a routing/index chunk listing all top-level sections — used for broad queries.
+        // Passed through the splitter so oversized indexes are broken into bounded chunks.
+//        val indexText = buildIndexChunk(documents)
+//        val indexDoc = Document.builder()
+//            .text(indexText)
+//            .metadata("title", "Rules Index")
+//            .metadata("section", 0)
+//            .metadata("keywords", "index,overview,sections,contents,rules")
+//            .metadata("source", resource.filename.orEmpty())
+//            .build()
+//        splitter.apply(listOf(indexDoc)).forEachIndexed { i, chunk ->
+//            documents.add(
+//                Document.builder()
+//                    .text(chunk.text)
+//                    .metadata(chunk.metadata)
+//                    .metadata("chunk_index", i)
+//                    .build()
+//            )
+//        }
 
         return documents
     }
@@ -83,46 +84,58 @@ class MarkdownDocService : DocService {
         documents: MutableList<Document>,
     ) {
         title ?: return
-        val content = currentLines.joinToString("\n").trim()
-        if (content.isBlank()) return
+        // Strip markdown heading markers and leading section numbers (e.g. "###### 13-1-7-1. ") from body lines.
+        // This reduces structural noise so the keyword/concept term dominates the embedding.
+        val cleanContent = currentLines
+            .map { it.trimStart().replace(Regex("^#+\\s+"), "").replace(Regex("^[\\d]([\\d.-]*)\\s*\\.\\s*"), "") }
+            .filter { it.isNotBlank() }
+            .joinToString("\n")
+            .trim()
+        if (cleanContent.isBlank()) return
 
-        val keywords = extractKeywords(content)
+//        val keywords = extractKeywords(cleanContent)
         // Section number comes from the ## header (e.g. "8) Attacking and Battles" → 8)
         val sectionNum = h2Title?.let { Regex("""^(\d+)[).]""").find(it)?.groupValues?.get(1)?.toIntOrNull() } ?: 0
 
-        val titlePrefix = "Gundam Card Game Rules — $breadcrumb\n\n"
-        val sectionDoc = Document.builder()
-            .text("$titlePrefix$content")
-            .metadata("title", title)
-            .metadata("section", sectionNum)
-            .metadata("keywords", keywords.joinToString(","))
-            .metadata("source", resource.filename.orEmpty())
-            .build()
+        // Strip the leading section number from the title (e.g. "13-1-7. <Suppression>" → "<Suppression>")
+        // and use it as the only prefix — the breadcrumb is omitted because all sibling chunks share
+        // the same parent path, which pulls their embeddings together and kills discrimination.
+        val cleanTitle = title.replace(Regex("^[\\d]+([\\d.-]*)\\s*\\.?[).]?\\s*"), "").trim()
+        val body = if (cleanTitle.isNotBlank()) "$cleanTitle\n\n$cleanContent" else cleanContent
 
-        // For most fine-grained chunks (##### level) the content will be well under 400 tokens
-        // and the splitter will return it as-is. The splitter only activates for genuinely long
-        // sections (e.g. large ## or #### blocks without finer headings).
-        val chunks = splitter.apply(listOf(sectionDoc))
-        chunks.forEachIndexed { i, chunk ->
-            val text = if (chunk.text.orEmpty().startsWith(titlePrefix)) chunk.text else "$titlePrefix${chunk.text}"
-            documents.add(
-                Document.builder()
-                    .text(text)
-                    .metadata(chunk.metadata)
-                    .metadata("chunk_index", i)
-                    .metadata("chunk_total", chunks.size)
-                    .build()
-            )
-        }
+        documents.add(
+            Document.builder()
+                .text("search_document: $body")
+                .metadata("title", title)
+                .metadata("section", sectionNum)
+//                .metadata("keywords", keywords.joinToString(","))
+                .metadata("source", resource.filename.orEmpty())
+                .build()
+        )
+//        val chunks = splitter.apply(listOf(sectionDoc))
+//        chunks.forEachIndexed { i, chunk ->
+//            val text = if (chunk.text.orEmpty().startsWith(titlePrefix)) chunk.text else "$titlePrefix${chunk.text}"
+//            documents.add(
+//                Document.builder()
+//                    .text(text)
+//                    .metadata(chunk.metadata)
+//                    .metadata("chunk_index", i)
+//                    .metadata("chunk_total", chunks.size)
+//                    .build()
+//            )
+//        }
     }
 
     /**
-     * Builds a concise index chunk listing each section title and its key topics.
-     * Helps the retriever find the right section for broad or ambiguous queries.
+     * Builds a concise index chunk listing top-level (##) sections and their key topics.
+     * Deduplicates by section number so the index stays small regardless of chunk count.
      */
     private fun buildIndexChunk(docs: List<Document>): String {
+        val seen = mutableSetOf<Int>()
         val lines = mutableListOf("Gundam Card Game Rules — Section Index\n")
         for (doc in docs) {
+            val section = doc.metadata["section"] as? Int ?: continue
+            if (section == 0 || !seen.add(section)) continue
             val title = doc.metadata["title"] as? String ?: continue
             val keywords = doc.metadata["keywords"] as? String ?: ""
             lines.add("- $title: $keywords")

@@ -1,6 +1,5 @@
 package com.aimuro.service
 
-import com.aimuro.configuration.promptTemplate
 import com.aimuro.controller.ChatMessage
 import com.aimuro.controller.ChatRequest
 import com.aimuro.controller.RulesResponse
@@ -86,12 +85,12 @@ class AimuroChatServiceImpl(
         logger.info("Generating async response for requestId: $requestId, conversationId: $conversationId")
         streamBufferService.setStatus(requestId, "in_progress")
         streamBufferService.setActiveRequest(conversationId, requestId)
-        val messages = conversation.map { msg ->
+        val messages = conversation.dropLast(1).map { msg ->
             if (msg.role == "user") UserMessage(msg.content) else AssistantMessage(msg.content)
         }
         val chunks = mutableListOf<String>()
         chatClient
-            .prompt(promptTemplate.template)
+            .prompt()
             .messages(messages)
             .user(conversation.last().content)
             .stream()

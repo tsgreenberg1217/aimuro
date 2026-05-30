@@ -1,0 +1,22 @@
+spring:
+  ai:
+    model:
+      chat: ollama
+      embedding: ollama
+      image: none
+      audio:
+        speech: none
+        transcription: none
+      moderation: none
+    ollama:
+      base-url: http://localhost:11434
+      chat:
+        options:
+          model: llama3.1
+      embedding:
+        options:
+          model: nomic-embed-text
+          num-ctx: 8192
+          truncate: false
+      init:
+        pull-model-strategy: when_missing

@@ -1,3 +1,7 @@
+app:
+  ai:
+    nomic-prefix: true
+
 spring:
   ai:
     model:

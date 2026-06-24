@@ -15,7 +15,8 @@ class GundamAdvisor(
     private val chatModel: ChatModel,
     private val vectorStore: VectorStore,
     private val promptConfig: PromptConfig,
-    private val similarityThreshold: Double = 0.6
+    private val similarityThreshold: Double = 0.6,
+    private val nomicPrefix: Boolean = false
 ) : BaseAdvisor {
 
     private val logger = LoggerFactory.getLogger(GundamAdvisor::class.java)
@@ -28,11 +29,13 @@ class GundamAdvisor(
         // Strip card data appended by CardServiceAdvisor so the vector search uses only the user's question.
         val question = chatClientRequest.prompt().userMessage.text
 
+        logger.info("GundamAdvisor: Processing question: $question")
+
         val k = classifyQuestionDepth(question)
 
         val docs = vectorStore.similaritySearch(
             SearchRequest.builder()
-                .query("search_query: $question")
+                .query(if (nomicPrefix) "search_query: $question" else question)
                 .topK(k)
                 .similarityThreshold(similarityThreshold)
                 .build()

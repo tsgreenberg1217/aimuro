@@ -48,7 +48,13 @@ class CardServiceAdvisor(
         val capture = CardToolCapture(cardToolService)
         cardServiceLLMToolClient
             .prompt()
-            .user("Question: $query")
+//            .user("Question: $query")
+            .user(
+                "If the following Gundam TCG question requires looking up specific card data, " +
+                        "use the available tools to fetch it and return only the card data. " +
+                        "DO NOT TRY TO ANSWER THE QUESTION OR INFER ANYTHING YET!" +
+                        "If no card lookup is needed, reply only with: NONE\n\nQuestion: $query"
+            )
             .tools(capture)
             .call()
             .content()

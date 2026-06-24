@@ -1,3 +1,7 @@
+app:
+  ai:
+    nomic-prefix: false
+
 spring:
   ai:
     model:
@@ -5,4 +9,10 @@ spring:
       embedding: openai
     openai:
       api-key: ${OPEN_AI_KEY}
-      model: o4-mini
+      chat:
+        options:
+          model: o4-mini
+          temperature: 1.0
+      embedding:
+        options:
+          model: text-embedding-3-small

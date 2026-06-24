@@ -2,11 +2,14 @@ package com.aimuro.etl.document_service
 
 import com.aimuro.etl.DocService
 import org.springframework.ai.document.Document
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.core.io.Resource
 import org.springframework.stereotype.Service
 
 @Service("markdownDocService")
-class MarkdownDocService : DocService {
+class MarkdownDocService(
+    @Value("\${app.ai.nomic-prefix:false}") private val nomicPrefix: Boolean
+) : DocService {
 
     override fun getDocs(resource: Resource): List<Document> {
 
@@ -87,7 +90,7 @@ class MarkdownDocService : DocService {
 
         documents.add(
             Document.builder()
-                .text("search_document: $body")
+                .text(if (nomicPrefix) "search_document: $body" else body)
                 .metadata("title", title)
                 .metadata("section", sectionNum)
 //                .metadata("keywords", keywords.joinToString(","))

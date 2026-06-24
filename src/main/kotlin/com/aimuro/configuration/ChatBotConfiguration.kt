@@ -36,7 +36,9 @@ class ChatBotConfiguration {
         vectorStore: VectorStore,
         chatModel: ChatModel,
         promptConfig: PromptConfig,
-    ): BaseAdvisor = GundamAdvisor(chatModel, vectorStore, promptConfig, 0.6)
+        @Value("\${app.ai.similarity-threshold:0.6}") similarityThreshold: Double,
+        @Value("\${app.ai.nomic-prefix:false}") nomicPrefix: Boolean,
+    ): BaseAdvisor = GundamAdvisor(chatModel, vectorStore, promptConfig, similarityThreshold, nomicPrefix)
 
     @Bean
     @CardServiceLLMToolClient

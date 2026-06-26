@@ -4,7 +4,7 @@ app:
 
 spring:
   profiles:
-    active: debug,openai
+    active: debug,ollama
   threads:
     virtual:
       enabled: true

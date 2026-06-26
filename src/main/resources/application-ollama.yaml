@@ -1,6 +1,6 @@
 app:
   ai:
-    nomic-prefix: true
+    nomic-prefix: false
 
 spring:
   ai:
@@ -19,8 +19,8 @@ spring:
           model: llama3.1
       embedding:
         options:
-          model: nomic-embed-text
-          num-ctx: 8192
+          model: qwen3-embedding:0.6b
+#          num-ctx: 8192
           truncate: false
       init:
         pull-model-strategy: when_missing

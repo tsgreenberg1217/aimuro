@@ -1,6 +1,4 @@
-# Gundam Card Game Comprehensive Rules Ver. 1.5.0 Updated January 30, 2025
 
-[//]: # ( # Table of Contents 1. Game Overview 2. Card Information 3. Card Types 4. Game Locations 5. Essential Game Terminology 6. Preparing to Play 7. Game Progression 8. Attacking and Battles 9. Action Steps 10. Effect Activation and Resolution 11. Rules Management 12. Multiplayer Battle 13. Keyword Effects and Keywords)
  # Comprehensive Rules
  ## 1) Game Overview
  #### 1-1. Number of Players
@@ -562,4 +560,5 @@
  ###### 13-2-12-2. 【During Link】 can appear as “【During Link】(text).” This means while a Pilot fulfilling the link conditions is paired with this Unit, perform (text). Ex: An effect reading “【During Link】【Attack】Draw 1” lets you draw a card when the Unit attacks if a Pilot fulfilling the link conditions is paired with it.
  ##### 13-2-13. 【Once per Turn】
  ###### 13-2-13-1. 【Once per Turn】 is the keyword indicating that that effect can 31 only be activated one time during that turn.
- ###### 13-2-13-2. If multiple cards have a copy of the same effect with 【Once per Turn】, each card can activate it one time. 32 ●Ver. 1.5.0 (January 30, 2026) Update ・5-17-4. Added ・2-11-3, 3-3-9-2. Revised ・13-2-10-1, 13-2-12-1. Corrected language to conform to actual usage ● Ver. 1.4.0 (November 17, 2025) Update ・10-1-8-1-2. 10-2-2-1. 12-3-14. 12-3-14-1. Added ・10-1-8-1-1. Added reference ・10-3-3. Corrected language to conform to actual usage ● Ver. 1.3.0 (October 3, 2025) Update ・5-20. Added ・10-1-6-8-1. Added ・7-5-3-1, 7-5-4-1, 8-5-3-2-2, 12-2, 13-1-5-2, 13-2-10-2. Corrected errors ●Ver. 1.2.0 (September 8, 2025) Update ・2-4-2. Added purple ・13-1-7. Added <Suppression> ・13-2-10-2. Added example ・13-2-12-2. Added ● Ver. 1.1.1 (August 22, 2025) Update ・8-2-2. 10-1-6-1. Revised 【Attack】 keywords. ● Ver. 1.1.0 (July 24, 2025) Update ・13-2-11, 13-2-12. Added (【When Linked】【During Link】 keywords) ・7-5-5-2. Added (card playing steps) ・10-3-4. Removed (unnecessary rule) ・12-2-1. Revised highlighted passages (for removal of Japanese-language specific errors) ・12-3-7. Removed (duplicates previous text) ・ Added new section “3. Card Types.” ・ Adjusted Comprehensive Rules language coinciding with their release. No rule changes. 33
+ ###### 13-2-13-2. If multiple cards have a copy of the same effect with 【Once per Turn】, each card can activate it one time. 
+

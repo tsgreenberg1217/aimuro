@@ -1,0 +1,18 @@
+app:
+  ai:
+    nomic-prefix: false
+
+spring:
+  ai:
+    model:
+      chat: openai
+      embedding: openai
+    openai:
+      api-key: ${OPEN_AI_KEY}
+      chat:
+        options:
+          model: o4-mini
+          temperature: 1.0
+      embedding:
+        options:
+          model: text-embedding-3-small

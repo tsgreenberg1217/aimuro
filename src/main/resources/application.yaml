@@ -1,12 +1,12 @@
+app:
+  ai:
+    similarity-threshold: 0.3
+
 spring:
   profiles:
-    active: debug
+    active: debug,ollama
   threads:
     virtual:
       enabled: true
   application:
     name: aimuro
-  ai:
-    openai:
-      api-key: ${OPEN_AI_KEY}
-      model: o4-mini

@@ -7,6 +7,11 @@ spring:
     redis:
       host: localhost
       port: 6379
+  ai:
+    vectorstore:
+      pgvector:
+        initialize-schema: true
+#        dimensions: 768
 app:
   conversation:
     datasource:

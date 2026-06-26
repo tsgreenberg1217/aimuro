@@ -13,13 +13,24 @@ AiMURO answers natural-language rules questions with the accuracy of a tournamen
 
 ### Multi-Stage Retrieval-Augmented Generation (RAG)
 
-The answer pipeline runs through two coordinated advisors before the model ever generates a response:
+The answer pipeline runs through three coordinated advisors before the model generates a response:
 
-1. **Card Enrichment (pre-flight LLM call)** — A dedicated `ChatClient` with tool-calling enabled analyzes the user's question and, if a specific card is mentioned, fetches live card data via GraphQL before the main query executes. The enriched card attributes (type, level, cost, color, traits, effects) are injected into the prompt so retrieval is card-aware.
+1. **Card Enrichment (pre-flight LLM call)** — `CardServiceAdvisor` analyzes the user's question and, if a specific card is mentioned, fetches live card data via GraphQL before the main query executes. The enriched card attributes (type, level, cost, color, traits, effects) are stored in the advisor context map for downstream stages.
 
-2. **Adaptive Vector Search** — A custom `GundamAdvisor` wrapping Spring AI's `QuestionAnswerAdvisor` first classifies question complexity (SIMPLE / MODERATE / IN_DEPTH) with a lightweight LLM call, then dynamically adjusts top-K retrieval (6 / 10 / 16 chunks) against a PostgreSQL + pgvector store. Simple lookups stay lean; complex multi-rule interactions pull broader context.
+2. **Adaptive Vector Search** — `GundamAdvisor` classifies question complexity (SIMPLE / MODERATE / IN_DEPTH) with a lightweight LLM call, then dynamically retrieves top-K chunks (10 / 16 / 20) from the pgvector store. Results are written to the advisor context map rather than directly into the prompt, keeping retrieval cleanly decoupled from prompt assembly.
 
-The result: retrieval depth scales with question complexity automatically, without any user-side configuration.
+3. **Prompt Assembly** — `PromptAssemblerAdvisor` reads both the rules context and card data from the context map and renders the final user message using `rules-advisor-template.txt`. This separates prompt construction from retrieval logic and makes the template independently editable.
+
+The result: retrieval depth scales with question complexity automatically, and each stage has a single, focused responsibility.
+
+### Discriminative Embedding Strategy
+
+Rules documents are split at `#####` heading boundaries — each heading (e.g. a keyword effect like `<Suppression>`) becomes its own embedded chunk. Two key decisions keep embeddings semantically sharp:
+
+- **No breadcrumb prefixes** — a previous approach prepended the full ancestor path (e.g. `13) Keyword Effects > 13-1. Keyword Effects > 13-1-7. <Suppression>`) to every chunk. Because all sibling chunks share the same prefix, their embeddings cluster together, degrading search precision. The prefix is gone.
+- **Section numbers stripped** — numeric prefixes are removed from both titles and body lines so the concept term (`<Suppression>`, `<Blocker>`, etc.) dominates the embedding rather than structural noise.
+
+Each chunk is embedded directly at `#####` granularity without further token-splitting — these sections are compact enough that splitting only hurts coherence.
 
 ### Agentic Tool Calling
 
@@ -34,6 +45,10 @@ The model decides autonomously whether card data is needed and which tool to inv
 
 Card lookups hit a live GraphQL API (`GundamCardGraphQlClient`) rather than a static snapshot, ensuring card text and attributes always reflect the current card database.
 
+### Externalized Prompts
+
+All prompt strings live in `src/main/resources/prompts/*.txt` and are loaded lazily at startup. The system prompt, rules advisor template, card enrichment prompts, and classification prompts can all be edited without recompiling.
+
 ### Resilient SSE Streaming
 
 Rather than piping the AI response directly to an SSE connection, AIMURO decouples generation from delivery using Redis Streams:
@@ -46,11 +61,11 @@ This means a dropped connection never loses a response.
 
 ### Production-Ready Infrastructure, Debug-Friendly Development
 
-| Mode | Vector Store | Conversation DB | Redis |
+| Mode | Vector Store | LLM / Embeddings | Notes |
 |------|-------------|-----------------|-------|
-| `prod` (Docker) | PgVector (pgvector pg18) | PostgreSQL `aimuro-conversation-db` | Required |
-| Default (local) | PgVector | PostgreSQL | Required |
-| `debug` profile | In-memory `SimpleVectorStore` | None required | Not used |
+| `openai` | PgVector (pgvector pg18) | OpenAI o4-mini / text-embedding-3-small | Requires `OPEN_AI_KEY` |
+| `ollama` | PgVector (pgvector pg18) | Ollama llama3.1 / qwen3-embedding:0.6b | Runs fully locally, no API key |
+| `debug` | In-memory `SimpleVectorStore` | Configurable | No DB or Redis needed |
 
 Spring profiles let engineers iterate locally without a running database. Docker Compose brings up the full stack — app + pgvector + PostgreSQL + Redis — with a single command.
 
@@ -62,7 +77,8 @@ Spring profiles let engineers iterate locally without a running database. Docker
 |-------|-----------|
 | Runtime | Kotlin / Spring Boot |
 | AI Framework | Spring AI |
-| LLM | OpenAI `o4-mini` |
+| LLM | OpenAI `o4-mini` (`openai` profile) / Ollama `llama3.1` (`ollama` profile) |
+| Embeddings | OpenAI `text-embedding-3-small` / Ollama `qwen3-embedding:0.6b` |
 | Vector Store | PostgreSQL + pgvector (pg18) |
 | Conversation History | PostgreSQL (JPA) |
 | Stream Buffer | Redis Streams |
@@ -86,17 +102,22 @@ CardServiceAdvisor (highest precedence)
   └─ Pre-flight LLM call with tool access
        ├─ findCard(name) → GraphQL
        └─ findCards(filter) → GraphQL
-  └─ Enriches prompt with card data if relevant
+  └─ Stores card data in advisor context map
       │
       ▼
 GundamAdvisor
   └─ Classifies question: SIMPLE / MODERATE / IN_DEPTH
-  └─ Adjusts top-K (6 / 10 / 16)
+  └─ Adjusts top-K (10 / 16 / 20)
   └─ Semantic search → pgvector
-  └─ Injects rules excerpts into prompt
+  └─ Stores rules context in advisor context map
       │
       ▼
-OpenAI o4-mini
+PromptAssemblerAdvisor
+  └─ Reads rules context + card data from context map
+  └─ Renders final user message via rules-advisor-template.txt
+      │
+      ▼
+LLM (OpenAI o4-mini or Ollama llama3.1)
   └─ Streams chunks → ChatStreamProducer → Redis stream:{requestId}
   └─ On complete: saves to PostgreSQL, writes done sentinel, sets TTL
       │
@@ -114,8 +135,14 @@ GET /ask/{requestId}/stream  → Reconnect / replay from Redis
 ## Getting Started
 
 ```bash
-# Full stack (Docker)
-./aimuro-build.sh
+# Full stack with OpenAI (Docker)
+OPEN_AI_KEY=your-key ./aimuro-build.sh
+
+# Full stack with Ollama (requires Ollama running locally on port 11434)
+./aimuro-build.sh  # set spring.profiles.active=ollama in application.yaml first
+
+# Debug mode — no database or Redis required
+./gradlew bootRun --args='--spring.profiles.active=debug'
 ```
 
 App runs on `localhost:8080` in both local and Docker.
@@ -148,6 +175,4 @@ GET /conversation/{conversationId}/status
 Both `/ask` and `/ask/{requestId}/stream` return `text/event-stream`. Each event is a `RulesResponse` with `answer` (chunk) and `isComplete` (`true` on the final event).
 
 ## K8
-You can also use the gundamhub-k8 to run this as part of a cluster. Set `OPEN_AI_KEY`, in your environment as your key from Open AI.
-
-
+You can also use the gundamhub-k8 to run this as part of a cluster. Set `OPEN_AI_KEY` in your environment as your key from Open AI.

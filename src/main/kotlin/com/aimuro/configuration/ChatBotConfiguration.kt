@@ -1,83 +1,42 @@
 package com.aimuro.configuration
 
-import com.aimuro.chat_advisor.CardServiceAdvisor
-import com.aimuro.chat_advisor.GundamAdvisor
-import com.aimuro.chat_advisor.PromptAssemblerAdvisor
 import com.aimuro.configuration.prompt.PromptConfig
-import com.aimuro.tools.CardToolService
 import org.springframework.ai.chat.client.ChatClient
-import org.springframework.ai.chat.client.advisor.api.BaseAdvisor
-import org.springframework.ai.chat.model.ChatModel
-import org.springframework.ai.vectorstore.VectorStore
 import org.springframework.beans.factory.annotation.Qualifier
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Primary
 
 @Qualifier
-annotation class ComprehensiveRulesAdvisor
-
-@Qualifier
-annotation class CardEnrichmentAdvisor
-
-@Qualifier
-annotation class PromptAssemblerAdvisorBean
-
-@Qualifier
-annotation class CardServiceLLMToolClient
+annotation class PlannerChatClient
 
 @Configuration
 class ChatBotConfiguration {
 
+    // Dedicated low-overhead client for QueryPlannerService's structured-output planning call —
+    // deliberately separate from the primary client so the planner never has tools attached
+    // to it and can't itself get pulled into a tool-calling loop.
     @Bean
-    @ComprehensiveRulesAdvisor
-    fun getComprehensiveRulesAdvisor(
-        vectorStore: VectorStore,
-        chatModel: ChatModel,
-        promptConfig: PromptConfig,
-        @Value("\${app.ai.similarity-threshold:0.6}") similarityThreshold: Double,
-        @Value("\${app.ai.nomic-prefix:false}") nomicPrefix: Boolean,
-    ): BaseAdvisor = GundamAdvisor(chatModel, vectorStore, promptConfig, similarityThreshold, nomicPrefix)
-
-    @Bean
-    @CardServiceLLMToolClient
-    fun cardServiceLLMToolClient(
+    @PlannerChatClient
+    fun plannerChatClient(
         chatClientBuilder: ChatClient.Builder,
-        promptConfig: PromptConfig
+        promptConfig: PromptConfig,
     ): ChatClient = chatClientBuilder
-        .defaultSystem(promptConfig.cardServiceSystemPrompt)
+        .defaultSystem(promptConfig.plannerSystemPrompt)
         .build()
-
-    @Bean
-    @CardEnrichmentAdvisor
-    fun cardEnrichmentAdvisor(
-        @CardServiceLLMToolClient cardServiceLLMToolClient: ChatClient,
-        cardToolService: CardToolService,
-        chatModel: ChatModel,
-        promptConfig: PromptConfig
-    ): BaseAdvisor = CardServiceAdvisor(cardServiceLLMToolClient, cardToolService, chatModel, promptConfig)
-
-    @Bean
-    @PromptAssemblerAdvisorBean
-    fun promptAssemblerAdvisor(promptConfig: PromptConfig): BaseAdvisor = PromptAssemblerAdvisor(promptConfig)
 
     @Bean
     @Primary
     fun aimuroChatClient(
         chatClientBuilder: ChatClient.Builder,
-        @CardEnrichmentAdvisor cardEnrichmentAdvisor: BaseAdvisor,
-        @ComprehensiveRulesAdvisor comprehensiveRulesAdvisor: BaseAdvisor,
-        @PromptAssemblerAdvisorBean promptAssemblerAdvisor: BaseAdvisor,
-        promptConfig: PromptConfig
+        promptConfig: PromptConfig,
     ): ChatClient {
+        // No .defaultTools(...) here on purpose: tools are attached per-request in
+        // AgenticChatOrchestrator based on the planner's output, so a request that needs
+        // neither lookup genuinely has no tools available rather than relying on
+        // request-level .tools() to "override" a client-wide default.
         return chatClientBuilder
             .defaultSystem(promptConfig.systemPrompt)
-            .defaultAdvisors(
-                cardEnrichmentAdvisor,
-                comprehensiveRulesAdvisor,
-                promptAssemblerAdvisor,
-            )
             .build()
     }
 }

@@ -1,6 +1,0 @@
-Classify the depth of this question.
-SIMPLE = basic factual lookup.
-MODERATE = requires some rule knowledge.
-IN_DEPTH = complex multi-rule interaction.
-
-Question: {{query}}

@@ -3,7 +3,6 @@ package com.aimuro.service
 import com.aimuro.controller.ChatRequest
 import com.aimuro.controller.RulesResponse
 import com.aimuro.history.ChatResponse
-import org.springframework.ai.chat.client.ChatClient
 import org.springframework.ai.chat.messages.AssistantMessage
 import org.springframework.ai.chat.messages.UserMessage
 import org.springframework.context.annotation.Profile
@@ -20,7 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger
 @Service
 @Profile("debug")
 class DebugAimuroChatServiceImpl(
-    private val chatClient: ChatClient
+    private val agenticChatOrchestrator: AgenticChatOrchestrator
 ) : AimuroChatService {
 
     private val chunkStore = ConcurrentHashMap<String, MutableList<String>>()
@@ -48,12 +47,8 @@ class DebugAimuroChatServiceImpl(
         val messages = request.conversation.dropLast(1).map { msg ->
             if (msg.role == "user") UserMessage(msg.content) else AssistantMessage(msg.content)
         }
-        chatClient
-            .prompt()
-            .messages(messages)
-            .user(request.conversation.last().content)
-            .stream()
-            .content()
+        agenticChatOrchestrator
+            .streamResponse(messages, request.conversation.last().content)
             .doOnNext { chunk -> chunkStore[requestId]?.add(chunk) }
             .doOnComplete { statusStore[requestId] = "complete" }
             .doOnError { statusStore[requestId] = "error" }

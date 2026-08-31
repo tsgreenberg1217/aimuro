@@ -10,7 +10,6 @@ import com.aimuro.history.ChatStreamProducer
 import com.aimuro.repository.ConversationRepository
 import com.aimuro.history.StreamBufferService
 import org.slf4j.LoggerFactory
-import org.springframework.ai.chat.client.ChatClient
 import org.springframework.ai.chat.messages.AssistantMessage
 import org.springframework.ai.chat.messages.UserMessage
 import org.springframework.context.annotation.Profile
@@ -24,7 +23,7 @@ import java.util.UUID
 @Service
 @Profile("!debug")
 class AimuroChatServiceImpl(
-    private val chatClient: ChatClient,
+    private val agenticChatOrchestrator: AgenticChatOrchestrator,
     private val streamBufferService: StreamBufferService,
     private val chatHistoryRepository: ChatHistoryRepository,
     private val conversationRepository: ConversationRepository,
@@ -89,12 +88,8 @@ class AimuroChatServiceImpl(
             if (msg.role == "user") UserMessage(msg.content) else AssistantMessage(msg.content)
         }
         val chunks = mutableListOf<String>()
-        chatClient
-            .prompt()
-            .messages(messages)
-            .user(conversation.last().content)
-            .stream()
-            .content()
+        agenticChatOrchestrator
+            .streamResponse(messages, conversation.last().content)
             .doOnNext { chunk ->
                 chatStreamProducer.appendChunk(requestId, chunk)
                 chunks.add(chunk)

@@ -4,7 +4,9 @@ query Cards($filter: CardFilter) {
         rarity
         code
         level
+        cost
         color
+        effect
         cardType
         zone
         trait

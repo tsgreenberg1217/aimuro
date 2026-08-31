@@ -18,7 +18,7 @@ repositories {
 	mavenCentral()
 }
 
-extra["springAiVersion"] = "1.0.0"
+extra["springAiVersion"] = "1.0.3"
 
 dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-web")

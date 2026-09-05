@@ -23,7 +23,7 @@ data class ChatMessage(
 
 data class RulesResponse(
     val answer: String,
-    val isComplete: Boolean = true
+    val isComplete: Boolean = false
 )
 
 @RestController

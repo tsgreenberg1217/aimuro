@@ -67,7 +67,10 @@ private fun replayFromMemory(requestId: String): Flux<RulesResponse> {
                 newChunks.forEach { chunk -> sink.next(RulesResponse(chunk)) }
                 when (statusStore[requestId]) {
                     "error" -> sink.error(ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR))
-                    "complete" -> if (offset.get() >= allChunks.size) sink.complete()
+                    "complete" -> if (offset.get() >= allChunks.size) {
+                        sink.next(RulesResponse("", isComplete = true))
+                        sink.complete()
+                    }
                 }
             }
             sink.onDispose { disposable.dispose() }

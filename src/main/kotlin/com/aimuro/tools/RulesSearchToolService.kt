@@ -47,7 +47,7 @@ class RulesSearchToolService(
         val response = if (docs.isEmpty()) "No relevant rules passages found for: $query"
         else docs.joinToString("\n\n") { it.text.orEmpty() }
 
-        logger.info("searchRules response ({} chars): {}", response.length, response.take(300))
+        logger.info("searchRules response ({} chars): {}", response.length, response)
         return response
     }
 }

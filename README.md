@@ -11,63 +11,50 @@ AiMURO answers natural-language rules questions with the accuracy of a tournamen
 
 # Technical Highlights
 
-### Multi-Stage Retrieval-Augmented Generation (RAG)
+### Agentic RAG via Planner + Tool-Calling
 
-The answer pipeline runs through three coordinated advisors before the model generates a response:
+Rather than a fixed retrieval pipeline, AiMURO decides per-request what information it actually needs and lets the model fetch it itself:
 
-1. **Card Enrichment (pre-flight LLM call)** — `CardServiceAdvisor` analyzes the user's question and, if a specific card is mentioned, fetches live card data via GraphQL before the main query executes. The enriched card attributes (type, level, cost, color, traits, effects) are stored in the advisor context map for downstream stages.
-
-2. **Adaptive Vector Search** — `GundamAdvisor` classifies question complexity (SIMPLE / MODERATE / IN_DEPTH) with a lightweight LLM call, then dynamically retrieves top-K chunks (10 / 16 / 20) from the pgvector store. Results are written to the advisor context map rather than directly into the prompt, keeping retrieval cleanly decoupled from prompt assembly.
-
-3. **Prompt Assembly** — `PromptAssemblerAdvisor` reads both the rules context and card data from the context map and renders the final user message using `rules-advisor-template.txt`. This separates prompt construction from retrieval logic and makes the template independently editable.
-
-The result: retrieval depth scales with question complexity automatically, and each stage has a single, focused responsibility.
+1. **Query Planning** — `QueryPlannerService` makes a cheap, tool-free LLM call that decomposes the question into sub-questions, tags each one with the tool it needs (card lookup, rules search, or neither), and assesses how deep a rules search should go (`SIMPLE` / `MODERATE` / `IN_DEPTH`). It's fail-open: if planning fails or doesn't parse, it defaults to offering both tools rather than silently skipping one the user needed.
+2. **Conditional Tool Attachment** — `AgenticChatOrchestrator` attaches only the tools the plan calls for (`RulesSearchToolService`, `CardToolService`, both, or neither) to a single call on the main chat model, along with a routing-hint block giving the model a focused, self-contained query per sub-question instead of making it derive one from the raw compound message.
+3. **Model-Driven Retrieval** — the model itself decides whether, how many times, and in what order to invoke the tools it's given, via Spring AI's built-in tool-calling loop. A single streamed answer can involve multiple tool round-trips under the hood before the model produces its final response.
 
 ### Discriminative Embedding Strategy
 
-Rules documents are split at `#####` heading boundaries — each heading (e.g. a keyword effect like `<Suppression>`) becomes its own embedded chunk. Two key decisions keep embeddings semantically sharp:
+Rules documents are split on a `##` > `####` > `#####` heading hierarchy — each `#####` leaf (e.g. a keyword effect like `<Suppression>`) becomes its own embedded chunk, with no further token-splitting. A few decisions keep embeddings semantically sharp:
 
-- **No breadcrumb prefixes** — a previous approach prepended the full ancestor path (e.g. `13) Keyword Effects > 13-1. Keyword Effects > 13-1-7. <Suppression>`) to every chunk. Because all sibling chunks share the same prefix, their embeddings cluster together, degrading search precision. The prefix is gone.
-- **Section numbers stripped** — numeric prefixes are removed from both titles and body lines so the concept term (`<Suppression>`, `<Blocker>`, etc.) dominates the embedding rather than structural noise.
-
-Each chunk is embedded directly at `#####` granularity without further token-splitting — these sections are compact enough that splitting only hurts coherence.
-
-### Agentic Tool Calling
-
-The card enrichment stage uses Spring AI's `@Tool` annotation to expose two callable functions to the LLM:
-
-- `findCard(name)` — exact card lookup by name
-- `findCards(filter)` — filtered search by color, level, cost, and unit trait
-
-The model decides autonomously whether card data is needed and which tool to invoke — a lightweight agentic loop running as a preprocessing step before the main response.
+- **No breadcrumb prefixes** — prepending the full ancestor path (e.g. `13) Keyword Effects > 13-1. Keyword Effects > 13-1-7. <Suppression>`) to every chunk pulls sibling chunks together in embedding space and degrades search precision. Chunks carry only their own heading text, with section numbers stripped so the concept term dominates the embedding.
+- **Title-only sections are embedded, not dropped** — most atomic rules are numbered as a single heading line with no body text below them (e.g. "a newly deployed Unit cannot attack on the turn it is deployed"). These use the cleaned heading text itself as the chunk content.
+- **Stated exceptions get an extra standalone chunk** — a sub-rule that states a qualifier or exception to a general rule (e.g. "Link Units can attack the turn they're deployed") is folded into its parent chunk *and* embedded separately, so it stays independently searchable instead of getting diluted inside a larger merged chunk of unrelated sibling text.
 
 ### Live Card Data via GraphQL
 
-Card lookups hit a live GraphQL API (`GundamCardGraphQlClient`) rather than a static snapshot, ensuring card text and attributes always reflect the current card database.
+Card lookups (`CardToolService.findCard(name)` / `findCards(filter)`) hit a live GraphQL API (`GundamCardGraphQlClient`) rather than a static snapshot, so card text and attributes always reflect the current card database.
 
 ### Externalized Prompts
 
-All prompt strings live in `src/main/resources/prompts/*.txt` and are loaded lazily at startup. The system prompt, rules advisor template, card enrichment prompts, and classification prompts can all be edited without recompiling.
+All prompt text lives in `src/main/resources/prompts/*.md` (`system-prompt.md`, `planner-system-prompt.md`, `character-prompt.md`) and loads lazily at startup, so prompt wording can be edited without recompiling — a restart is still needed to pick up the change.
 
 ### Resilient SSE Streaming
 
 Rather than piping the AI response directly to an SSE connection, AIMURO decouples generation from delivery using Redis Streams:
 
-1. `POST /ask` kicks off generation on a virtual thread and immediately opens an SSE connection backed by a Redis stream.
+1. `POST /ask` kicks off generation on a virtual thread and immediately returns a request ID; the client opens an SSE connection backed by a Redis stream.
 2. Each response chunk is published to `stream:{requestId}` as it arrives. A `done=true` sentinel closes the consumer.
-3. If the client disconnects mid-stream, it can reconnect via `GET /ask/{requestId}/stream` — the stream is replayed from the beginning, and the 10-minute TTL on completed streams means late fetches still work.
+3. If the client disconnects mid-stream, it can reconnect via `GET /ask/{requestId}/stream` — the stream picks up from Redis, and a 10-minute TTL on completed streams means late fetches still work.
 
-This means a dropped connection never loses a response.
+Under the `debug` profile, the same ask/replay contract runs against an in-process map instead of Redis, so this all works with no infrastructure running locally.
 
 ### Production-Ready Infrastructure, Debug-Friendly Development
 
-| Mode | Vector Store | LLM / Embeddings | Notes |
-|------|-------------|-----------------|-------|
-| `openai` | PgVector (pgvector pg18) | OpenAI o4-mini / text-embedding-3-small | Requires `OPEN_AI_KEY` |
-| `ollama` | PgVector (pgvector pg18) | Ollama llama3.1 / qwen3-embedding:0.6b | Runs fully locally, no API key |
-| `debug` | In-memory `SimpleVectorStore` | Configurable | No DB or Redis needed |
+Profiles combine along two independent axes:
 
-Spring profiles let engineers iterate locally without a running database. Docker Compose brings up the full stack — app + pgvector + PostgreSQL + Redis — with a single command.
+| Axis | Options | Effect |
+|------|---------|--------|
+| Infra | `debug` / `prod` | `debug`: in-memory vector store + embedded H2, no Redis. `prod` (default when no infra profile is set): real Postgres for both pgvector and conversation history, real Redis. |
+| Model | `openai` / `ollama` | `openai`: `o4-mini` chat + `text-embedding-3-small` embeddings, needs `OPEN_AI_KEY`. `ollama`: `llama3.1` chat + `qwen3-embedding:0.6b` embeddings, fully local, no API key. |
+
+`application.yaml` defaults to `debug,ollama` — plain `./gradlew bootRun` needs nothing but a local Ollama running. Docker Compose brings up the full stack — app + pgvector + PostgreSQL + Redis — with a single command.
 
 ---
 
@@ -93,41 +80,37 @@ Spring profiles let engineers iterate locally without a running database. Docker
 POST /ask  (conversationId + conversation history)
       │
       ▼
-AimuroChatServiceImpl
-  └─ Spawns virtual thread for async generation
-  └─ Returns requestId + opens SSE via Redis stream
+AimuroChatServiceImpl (DebugAimuroChatServiceImpl under `debug`)
+  └─ Spawns virtual thread for async generation, returns requestId immediately
+  └─ Client opens SSE via GET /ask/{requestId}/stream
       │
       ▼
-CardServiceAdvisor (highest precedence)
-  └─ Pre-flight LLM call with tool access
-       ├─ findCard(name) → GraphQL
-       └─ findCards(filter) → GraphQL
-  └─ Stores card data in advisor context map
+AgenticChatOrchestrator.streamResponse
+  └─ QueryPlannerService.plan(query) — decomposes into sub-questions,
+     tags each with a tool (card lookup / rules search / none), sets depth
+  └─ Attaches only the tools the plan calls for: RulesSearchToolService,
+     CardToolService, both, or neither
+  └─ Single .stream() call on the main chat model, with a per-tool
+     routing-hint block appended to the user message
       │
       ▼
-GundamAdvisor
-  └─ Classifies question: SIMPLE / MODERATE / IN_DEPTH
-  └─ Adjusts top-K (10 / 16 / 20)
-  └─ Semantic search → pgvector
-  └─ Stores rules context in advisor context map
+Main LLM (OpenAI o4-mini or Ollama llama3.1)
+  └─ Spring AI tool-calling loop — the model itself decides whether,
+     how many times, and in what order to call:
+       ├─ searchRules(query, depth) → similarity search against pgvector
+       └─ findCard(name) / findCards(filter) → GraphQL → gundamhub-card-service
+  └─ Produces one streamed final answer once all tool round-trips resolve
       │
       ▼
-PromptAssemblerAdvisor
-  └─ Reads rules context + card data from context map
-  └─ Renders final user message via rules-advisor-template.txt
-      │
-      ▼
-LLM (OpenAI o4-mini or Ollama llama3.1)
-  └─ Streams chunks → ChatStreamProducer → Redis stream:{requestId}
-  └─ On complete: saves to PostgreSQL, writes done sentinel, sets TTL
+ChatStreamProducer → Redis stream:{requestId} (in-memory map under `debug`)
+  └─ On complete: saves to PostgreSQL, writes done sentinel, sets 10-min TTL
       │
       ▼
 ChatStreamConsumer
-  └─ Reads Redis stream (100ms poll)
-  └─ Terminates on done sentinel
+  └─ Reads the stream, terminates on the done sentinel
   └─ Emits final isComplete=true event to client
 
-GET /ask/{requestId}/stream  → Reconnect / replay from Redis
+GET /ask/{requestId}/stream  → Reconnect to / replay an in-progress or completed stream
 ```
 
 ---
@@ -138,11 +121,11 @@ GET /ask/{requestId}/stream  → Reconnect / replay from Redis
 # Full stack with OpenAI (Docker)
 OPEN_AI_KEY=your-key ./aimuro-build.sh
 
-# Full stack with Ollama (requires Ollama running locally on port 11434)
-./aimuro-build.sh  # set spring.profiles.active=ollama in application.yaml first
+# Full stack with real infra + Ollama (requires Ollama running locally on port 11434)
+./gradlew bootRun --args='--spring.profiles.active=prod,ollama'
 
-# Debug mode — no database or Redis required
-./gradlew bootRun --args='--spring.profiles.active=debug'
+# Debug mode — no database or Redis required (this is the default: plain `./gradlew bootRun` works too)
+./gradlew bootRun --args='--spring.profiles.active=debug,ollama'
 ```
 
 App runs on `localhost:8080` in both local and Docker.

@@ -14,8 +14,17 @@ class QueryPlannerService(
 
     // Fail-open default: if the planner call throws or the model's output can't be parsed
     // into a QueryPlan, degrade to "call both tools" (the old always-on behavior) rather
-    // than silently skipping a lookup the user actually needed.
-    private val failOpenPlan = QueryPlan(needsRulesLookup = true, needsCardLookup = true)
+    // than silently skipping a lookup the user actually needed. No real sub-question split
+    // is possible here, so both tags get the full raw query as their routing hint — which
+    // degrades to the pre-hint behavior of the model working from the raw query itself.
+    private fun failOpenPlan(query: String) = QueryPlan(
+        subQuestions = listOf(
+            SubQuestion(query, ToolTarget.CARD_LOOKUP),
+            SubQuestion(query, ToolTarget.RULES_LOOKUP),
+        ),
+        needsRulesLookup = true,
+        needsCardLookup = true,
+    )
 
     fun plan(query: String): QueryPlan {
         val plan = try {
@@ -32,7 +41,7 @@ class QueryPlannerService(
         } catch (e: Exception) {
             logger.warn("QueryPlannerService: planning failed for '{}', falling back to fail-open plan", query, e)
             null
-        } ?: failOpenPlan
+        } ?: failOpenPlan(query)
 
         logger.info("QueryPlan for '{}': {}", query, plan)
         return plan

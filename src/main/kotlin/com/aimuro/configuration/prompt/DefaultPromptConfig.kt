@@ -7,11 +7,15 @@ import org.springframework.stereotype.Component
 class DefaultPromptConfig : PromptConfig {
 
     override val systemPrompt: String by lazy {
-        readPromptResource("prompts/system-prompt.txt")
+        readPromptResource("prompts/system-prompt.md")
     }
 
     override val plannerSystemPrompt: String by lazy {
-        readPromptResource("prompts/planner-system-prompt.txt")
+        readPromptResource("prompts/planner-system-prompt.md")
+    }
+
+    override val characterSystemPrompt: String by lazy {
+        readPromptResource("prompts/character-prompt.md")
     }
 
     private fun readPromptResource(path: String): String =

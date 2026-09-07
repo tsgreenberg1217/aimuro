@@ -38,16 +38,16 @@ class RulesSearchToolService(
                 .topK(topK)
                 .similarityThreshold(similarityThreshold)
                 .build()
-        ) ?: emptyList()
+        )
 
         docs.forEachIndexed { i, doc ->
-            logger.info("  [$i] score=${doc.score} title=${doc.metadata["title"]}")
+//            logger.info("  [$i] score=${doc.score} title=${doc.metadata["title"]}")
         }
 
         val response = if (docs.isEmpty()) "No relevant rules passages found for: $query"
-        else docs.joinToString("\n\n") { it.text.orEmpty() }
+        else docs.joinToString("\n\n") { "<passage>\n${it.text.orEmpty()}\n</passage>" }
 
-        logger.info("searchRules response ({} chars): {}", response.length, response)
+//        logger.info("searchRules response ({} chars): {}", response.length, response)
         return response
     }
 }

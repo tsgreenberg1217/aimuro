@@ -19,5 +19,6 @@ internal fun CardResponse.toCondensedString(): String {
 fun String?.cardInfoFormat(type: String): String? = this?.takeUnless { it.isEmpty() || it == "-" }?.let { "$type: $it" }
 
 
-fun List<CardResponse>.toCondensedString(): String = joinToString { "${it.toCondensedString()}\n" }
+fun List<CardResponse>.toCondensedString(): String =
+    joinToString("\n\n") { "<card>\n${it.toCondensedString()}\n</card>" }
 

@@ -30,12 +30,13 @@ class CardToolService(
 
     }
 
-    @Tool(description = "Find Gundam TCG cards matching filter criteria. Use when the user asks about multiple cards or a category of cards. Supports filtering by color (e.g. RED, BLUE, GREEN, WHITE, PURPLE), unit (mobile suit trait), level (e.g. 1, 2, 3), and/or cost (e.g. 1, 2, 3).")
+    @Tool(description = "Find Gundam TCG cards matching filter criteria. Use when the user asks about multiple cards or a category of cards. Supports filtering by color (e.g. RED, BLUE, GREEN, WHITE, PURPLE), cardType (e.g. UNIT, PILOT, COMMAND, BASE), trait (mobile suit trait), level (e.g. 1, 2, 3), and/or cost (e.g. 1, 2, 3).")
     fun findCards(filter: CardFilterQuery): String {
         logger.info("findCards called with filter={}", filter)
         val cards = cardService.findCards(filter)
-        logger.info("findCards returned {} result(s) for filter={}", cards.size, filter)
-        return if (cards.isEmpty()) "No cards found matching the given filters."
+        val response = if (cards.isEmpty()) "No cards found matching the given filters."
         else cards.toCondensedString()
+        logger.info("findCards response ({} result(s) for filter={}): {}", cards.size, filter, response)
+        return response
     }
 }

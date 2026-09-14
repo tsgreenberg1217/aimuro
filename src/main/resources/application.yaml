@@ -4,9 +4,23 @@ app:
 
 spring:
   profiles:
-    active: debug,ollama
+    active: debug,openai
   threads:
     virtual:
       enabled: true
   application:
     name: aimuro
+  ai:
+    model:
+      embedding: ollama
+    ollama:
+      base-url: http://localhost:11434
+      chat:
+        options:
+          model: qwen2.5:7b-instruct
+      embedding:
+        options:
+          model: qwen3-embedding:0.6b
+          truncate: false
+      init:
+        pull-model-strategy: when_missing

@@ -16,7 +16,7 @@ class IngestionService(
     @Value("classpath:/docs/gundam_card_game_comprehensive_rules_v1_5_0.md") val comprehensiveRules: Resource,
 ) : CommandLineRunner {
 
-    override fun run(vararg args: String?) {
+    override fun run(vararg args: String) {
         // Split by ## / #### / ##### heading (H2 > H4 > H5) — each leaf section becomes
         // one document with its title prepended (see MarkdownDocService).
         val sectionDocs = docService.getDocs(comprehensiveRules)

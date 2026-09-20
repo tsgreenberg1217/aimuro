@@ -11,7 +11,6 @@ Return a plan with:
   - `tool`: which lookup this sub-question needs — `CARD_LOOKUP` for a specific card's stats/cost/effect text or a search across cards by criteria, `RULES_LOOKUP` for Gundam TCG rules text (mechanics, timing, keywords, interactions), or `NONE` if it needs neither (greetings, chit-chat, meta questions about the assistant, or something answerable from general knowledge alone).
 - **needsRulesLookup**: true if any sub-question is tagged `RULES_LOOKUP`.
 - **needsCardLookup**: true if any sub-question is tagged `CARD_LOOKUP`.
-- **depth**: `SIMPLE` for a basic factual lookup, `MODERATE` for a question needing some surrounding rule context, `IN_DEPTH` for a complex multi-rule interaction requiring broader context. Only meaningful when `needsRulesLookup` is true.
 
 Set both `needsRulesLookup` and `needsCardLookup` to false for greetings ("hi", "how are you") and meta questions ("what can you do?"). Do not default to `CARD_LOOKUP` or `RULES_LOOKUP` out of caution — only tag a sub-question with a tool when it genuinely requires that lookup to answer well.
 
@@ -29,19 +28,19 @@ For any sub-question tagged `RULES_LOOKUP`, its question text becomes the litera
 ## Examples
 
 **Query:** "Hey AiMuro, how's it going?"
-**Plan:** `{"subQuestions": [], "needsRulesLookup": false, "needsCardLookup": false, "depth": "MODERATE"}`
+**Plan:** `{"subQuestions": [], "needsRulesLookup": false, "needsCardLookup": false}`
 
 **Query:** "What's the difference between the Deploy and Action Base zones?"
-**Plan:** `{"subQuestions": [{"question": "What is the Deploy zone?", "tool": "RULES_LOOKUP"}, {"question": "What is the Action Base zone?", "tool": "RULES_LOOKUP"}], "needsRulesLookup": true, "needsCardLookup": false, "depth": "MODERATE"}`
+**Plan:** `{"subQuestions": [{"question": "What is the Deploy zone?", "tool": "RULES_LOOKUP"}, {"question": "What is the Action Base zone?", "tool": "RULES_LOOKUP"}], "needsRulesLookup": true, "needsCardLookup": false}`
 
 **Query:** "If I pair Four Murasame with Kshatriya, can it attack the turn it was deployed? Explain your reasoning."
-**Plan:** `{"subQuestions": [{"question": "Get the information for Four Murasame and Kshatriya?", "tool": "CARD_LOOKUP"}, {"question": "Can a unit attack the turn it is deployed?", "tool": "RULES_LOOKUP"}], "needsRulesLookup": true, "needsCardLookup": true, "depth": "IN_DEPTH"}`
+**Plan:** `{"subQuestions": [{"question": "Get the information for Four Murasame and Kshatriya?", "tool": "CARD_LOOKUP"}, {"question": "Can a unit attack the turn it is deployed?", "tool": "RULES_LOOKUP"}], "needsRulesLookup": true, "needsCardLookup": true}`
 
 **Query:** "Can Gundam Epyon attack the turn it's deployed?"
-**Plan:** `{"subQuestions": [{"question": "Can a unit attack the turn it is deployed?", "tool": "RULES_LOOKUP"}], "needsRulesLookup": true, "needsCardLookup": false, "depth": "MODERATE"}`
+**Plan:** `{"subQuestions": [{"question": "Can a unit attack the turn it is deployed?", "tool": "RULES_LOOKUP"}], "needsRulesLookup": true, "needsCardLookup": false}`
 
 **Query:** "What does Suppression do?"
-**Plan:** `{"subQuestions": [{"question": "What does <Suppression> do?", "tool": "RULES_LOOKUP"}], "needsRulesLookup": true, "needsCardLookup": false, "depth": "SIMPLE"}`
+**Plan:** `{"subQuestions": [{"question": "What does <Suppression> do?", "tool": "RULES_LOOKUP"}], "needsRulesLookup": true, "needsCardLookup": false}`
 
 **Query:** "If my base gets destroyed while a pilot is attached to a unit there, what happens to the pilot?"
-**Plan:** `{"subQuestions": [{"question": "What happens to a pilot attached to a unit when the base is destroyed?", "tool": "RULES_LOOKUP"}], "needsRulesLookup": true, "needsCardLookup": false, "depth": "MODERATE"}`
+**Plan:** `{"subQuestions": [{"question": "What happens to a pilot attached to a unit when the base is destroyed?", "tool": "RULES_LOOKUP"}], "needsRulesLookup": true, "needsCardLookup": false}`

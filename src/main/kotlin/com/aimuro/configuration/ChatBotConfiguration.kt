@@ -17,6 +17,9 @@ annotation class PlannerChatClient
 @Qualifier
 annotation class CharacterChatClient
 
+@Qualifier
+annotation class ComplexityChatClient
+
 @Configuration
 class ChatBotConfiguration {
 
@@ -63,6 +66,18 @@ class ChatBotConfiguration {
         promptConfig: PromptConfig,
     ): ChatClient = ChatClient.builder(plannerOllamaChatModel)
         .defaultSystem(promptConfig.plannerSystemPrompt)
+        .build()
+
+    // Client for RulesComplexityClassifier's one-shot structured-output call. Always local Ollama
+    // (same plannerOllamaChatModel as the planner), independent of which provider aimuroChatClient
+    // is on, so classifying a rules query never costs an OpenAI call. No tools attached.
+    @Bean
+    @ComplexityChatClient
+    fun complexityChatClient(
+        @Qualifier("plannerOllamaChatModel") plannerOllamaChatModel: OllamaChatModel,
+        promptConfig: PromptConfig,
+    ): ChatClient = ChatClient.builder(plannerOllamaChatModel)
+        .defaultSystem(promptConfig.rulesComplexitySystemPrompt)
         .build()
 
     @Bean

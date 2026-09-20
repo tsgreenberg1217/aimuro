@@ -1,6 +1,5 @@
 package com.aimuro.tools
 
-import com.aimuro.planner.SearchDepth
 import org.slf4j.LoggerFactory
 import org.springframework.ai.tool.annotation.Tool
 import org.springframework.ai.vectorstore.SearchRequest
@@ -11,6 +10,7 @@ import org.springframework.stereotype.Service
 @Service
 class RulesSearchToolService(
     private val vectorStore: VectorStore,
+    private val complexityClassifier: RulesComplexityClassifier,
     @Value("\${app.ai.similarity-threshold:0.6}") private val similarityThreshold: Double,
     @Value("\${app.ai.nomic-prefix:false}") private val nomicPrefix: Boolean,
 ) {
@@ -24,11 +24,12 @@ class RulesSearchToolService(
     )
 
     @Tool(description = "Search the Gundam TCG comprehensive rules for passages relevant to a specific rules question. " +
-        "Formulate a focused, self-contained search query describing the exact rule, concept, or interaction you need — " +
+        "If the request includes routing instructions that give an exact query string, pass that string unchanged as the query. " +
+        "Otherwise, formulate a focused, self-contained query describing the exact rule, concept, or interaction you need — " +
         "do not just pass the user's raw message verbatim if it contains unrelated context. " +
-        "Set depth=SIMPLE for a basic factual lookup, MODERATE for a question needing some surrounding rule context, " +
-        "IN_DEPTH for a complex multi-rule interaction requiring broader context.")
-    fun searchRules(query: String, depth: SearchDepth = SearchDepth.MODERATE): String {
+        "Only use terms that appear in the question, retrieved card data, or retrieved rules text; never invent keyword names.")
+    fun searchRules(query: String): String {
+        val depth = complexityClassifier.classify(query)
         val topK = topKByDepth.getValue(depth)
         logger.info("searchRules called with query='{}', depth={} (topK={})", query, depth, topK)
 

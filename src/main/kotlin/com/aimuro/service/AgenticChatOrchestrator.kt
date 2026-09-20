@@ -40,7 +40,7 @@ class AgenticChatOrchestrator(
 
         val toolHints = buildToolHints(plan)
         val userMessage = if (toolHints.isBlank()) userQuery
-            else "<question>\n$userQuery\n</question>\n\n<tool_routing>\n$toolHints</tool_routing>"
+            else "<question>\n$userQuery\n</question>\n\n<tool_routing>\n$toolHints\n</tool_routing>"
 
         val answerChunks = mutableListOf<String>()
 
@@ -68,7 +68,7 @@ class AgenticChatOrchestrator(
             .stream()
             .content()
             .doOnNext { answerChunks.add(it) }
-            // Ground truth for the synthesized-prompt.txt transcript's final answer — see the
+            // Ground truth for the synthesized-prompt transcript's final answer — see the
             // comment on ChatModelIoLoggingHandler.appendToSynthesizedPromptFile for why that file
             // can't source this from the observation API itself.
             .doOnComplete {
@@ -108,21 +108,14 @@ class AgenticChatOrchestrator(
         Restate the answer above in AiMuro's voice (do not add, remove, or change any information — only change how it's expressed).
     """.trimIndent()
 
-    // Turns the planner's per-tool sub-question tags into an explicit routing block appended
-    // to the user message, so the model has a focused query to use for each tool it's given
-    // instead of deriving one itself from a compound raw query.
-    private fun buildToolHints(plan: QueryPlan): String {
-        val cardQuestions = plan.subQuestions.filter { it.tool == ToolTarget.CARD_LOOKUP }.map { it.question }
-        val rulesQuestions = plan.subQuestions.filter { it.tool == ToolTarget.RULES_LOOKUP }.map { it.question }
-        if (cardQuestions.isEmpty() && rulesQuestions.isEmpty()) return ""
-
-        return buildString {
-            appendLine("Sub-question routing — call the matching tool once per question below, as separate calls:")
-            if (cardQuestions.isNotEmpty()) appendLine("- For card lookups, call the tool separately for each: ${cardQuestions.joinToString("; ")}")
-            if (rulesQuestions.isNotEmpty()) appendLine("- For rules search, call the tool separately for each: ${rulesQuestions.joinToString("; ")}")
-            if (cardQuestions.size + rulesQuestions.size > 1) {
-                appendLine("These sub-questions are part of one request — once you have all the results, answer the original question above directly. Don't answer them as a separate list; synthesize one cohesive answer, explicitly comparing or relating them if the original question calls for it.")
+    // Lists the planner's sub-questions per tool in the user message, so the model has a focused
+    // query for each tool it's given instead of deriving one from a compound raw query. How to act
+    // on this block is a standing instruction — see "Tool Routing Rule" in prompts/system-prompt.md.
+    private fun buildToolHints(plan: QueryPlan): String =
+        listOf("Card lookups" to ToolTarget.CARD_LOOKUP, "Rules search" to ToolTarget.RULES_LOOKUP)
+            .mapNotNull { (label, tool) ->
+                val questions = plan.subQuestions.filter { it.tool == tool }.map { it.question }
+                if (questions.isEmpty()) null else "$label:\n" + questions.joinToString("\n") { "- \"$it\"" }
             }
-        }
-    }
+            .joinToString("\n\n")
 }

@@ -14,6 +14,10 @@ class DefaultPromptConfig : PromptConfig {
         readPromptResource("prompts/planner-system-prompt.md")
     }
 
+    override val rulesComplexitySystemPrompt: String by lazy {
+        readPromptResource("prompts/rules-complexity-prompt.md")
+    }
+
     override val characterSystemPrompt: String by lazy {
         readPromptResource("prompts/character-prompt.md")
     }

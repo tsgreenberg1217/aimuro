@@ -1,6 +1,7 @@
 package com.aimuro.configuration
 
 import com.aimuro.configuration.prompt.PromptConfig
+import com.aimuro.tools.RulesSearchToolService
 import org.springframework.ai.chat.client.ChatClient
 import org.springframework.ai.ollama.OllamaChatModel
 import org.springframework.ai.ollama.api.OllamaApi
@@ -19,6 +20,9 @@ annotation class CharacterChatClient
 
 @Qualifier
 annotation class ComplexityChatClient
+
+@Qualifier
+annotation class RulesAgentChatClient
 
 @Configuration
 class ChatBotConfiguration {
@@ -85,6 +89,7 @@ class ChatBotConfiguration {
     fun aimuroChatClient(
         chatClientBuilder: ChatClient.Builder,
         promptConfig: PromptConfig,
+        roundTripLoggingAdvisor: RoundTripLoggingAdvisor,
     ): ChatClient {
         // No .defaultTools(...) here on purpose: tools are attached per-request in
         // AgenticChatOrchestrator based on the planner's output, so a request that needs
@@ -96,10 +101,42 @@ class ChatBotConfiguration {
         // stronger choice for this bean specifically: qwen2.5-instruct was observed missing
         // implicit second tool-calls (e.g. not re-querying searchRules for a term like "Link
         // Units" not already covered) that o4-mini catches reliably.
+        //
+        // roundTripLoggingAdvisor is ordered inside Spring AI 2.0's ToolCallingAdvisor loop, so it
+        // logs each round-trip's output/finishReason/usage. ChatClient.Builder is prototype-scoped,
+        // so this doesn't leak onto characterChatClient.
         return chatClientBuilder
             .defaultSystem(promptConfig.systemPrompt)
+            .defaultAdvisors(roundTripLoggingAdvisor)
             .build()
     }
+
+    // Client for the rules-agent sub-call: given one focused rules sub-question, it owns the entire
+    // searchRules tool-calling loop (including any implicit follow-up search, e.g. re-querying
+    // "Link Unit" once that term surfaces unexplained in a retrieved passage) and returns one
+    // synthesized, evidence-backed finding. Invoked directly by RulesAgentService — never attached
+    // to aimuroChatClient's own tool list; see AgenticChatOrchestrator.
+    //
+    // Deliberately rides the SAME profile-switched chatClientBuilder as aimuroChatClient (o4-mini
+    // under openai, qwen2.5:7b-instruct under ollama) rather than the always-local-Ollama
+    // plannerOllamaChatModel used by plannerChatClient/complexityChatClient: unlike those two
+    // one-shot classification calls, this client has to reliably decide to make a follow-up tool
+    // call, which CLAUDE.md documents the local model as unreliable at.
+    //
+    // searchRules is hardcoded via .defaultTools(...) rather than attached per-request: this
+    // client's tool set never varies (always exactly RulesSearchToolService), unlike aimuroChatClient
+    // which conditionally attaches 0/1/2 tools per request. No circular dependency: RulesSearchToolService
+    // depends only on VectorStore/RulesComplexityClassifier, nothing back on this configuration class.
+    @Bean
+    @RulesAgentChatClient
+    fun rulesAgentChatClient(
+        chatClientBuilder: ChatClient.Builder,
+        promptConfig: PromptConfig,
+        rulesSearchToolService: RulesSearchToolService,
+    ): ChatClient = chatClientBuilder
+        .defaultSystem(promptConfig.rulesAgentSystemPrompt)
+        .defaultTools(rulesSearchToolService)
+        .build()
 
     // Voice-transform-only client: takes a finished, already-correct answer from
     // aimuroChatClient and rewrites it in AiMuro's persona. No tools attached — it never

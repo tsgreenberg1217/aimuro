@@ -22,6 +22,10 @@ class DefaultPromptConfig : PromptConfig {
         readPromptResource("prompts/character-prompt.md")
     }
 
+    override val rulesAgentSystemPrompt: String by lazy {
+        readPromptResource("prompts/rules-agent-system-prompt.md")
+    }
+
     private fun readPromptResource(path: String): String =
         ClassPathResource(path).getContentAsString(Charsets.UTF_8).trim()
 }

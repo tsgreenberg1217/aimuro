@@ -5,4 +5,5 @@ interface PromptConfig {
     val plannerSystemPrompt: String
     val rulesComplexitySystemPrompt: String
     val characterSystemPrompt: String
+    val rulesAgentSystemPrompt: String
 }

@@ -11,13 +11,14 @@ AiMURO answers natural-language rules questions with the accuracy of a tournamen
 
 # Technical Highlights
 
-### Agentic RAG via Planner + Tool-Calling
+### Agentic RAG via Planner + Sub-Agent Tool-Calling
 
-Rather than a fixed retrieval pipeline, AiMURO decides per-request what information it actually needs and lets the model fetch it itself:
+Rather than a fixed retrieval pipeline, AiMURO decides per-request what information it actually needs and lets the model fetch it itself — with a dedicated rules sub-agent handling the "did I actually resolve this" follow-up work:
 
-1. **Query Planning** — `QueryPlannerService` makes a cheap, tool-free LLM call that decomposes the question into sub-questions, tags each one with the tool it needs (card lookup, rules search, or neither), and assesses how deep a rules search should go (`SIMPLE` / `MODERATE` / `IN_DEPTH`). It's fail-open: if planning fails or doesn't parse, it defaults to offering both tools rather than silently skipping one the user needed.
-2. **Conditional Tool Attachment** — `AgenticChatOrchestrator` attaches only the tools the plan calls for (`RulesSearchToolService`, `CardToolService`, both, or neither) to a single call on the main chat model, along with a routing-hint block giving the model a focused, self-contained query per sub-question instead of making it derive one from the raw compound message.
+1. **Query Planning** — `QueryPlannerService` makes a cheap, tool-free LLM call (always local Ollama) that decomposes the question into sub-questions and tags each one with the tool it needs (card lookup, rules search, or neither). It's fail-open: if planning fails or doesn't parse, it defaults to offering both tools rather than silently skipping one the user needed.
+2. **Conditional Tool Attachment** — `AgenticChatOrchestrator` attaches only the tools the plan calls for (`RulesAgentService`, `CardToolService`, both, or neither) to a single call on the main chat model, along with a routing-hint block giving the model a focused, self-contained query per sub-question instead of making it derive one from the raw compound message.
 3. **Model-Driven Retrieval** — the model itself decides whether, how many times, and in what order to invoke the tools it's given, via Spring AI's built-in tool-calling loop. A single streamed answer can involve multiple tool round-trips under the hood before the model produces its final response.
+4. **Rules Sub-Agent** — for rules questions, the main model doesn't call vector search directly. It calls `RulesAgentService.answerRulesQuestion(question)`, which runs its *own* nested tool-calling loop (a separate chat client whose only tool is `RulesSearchToolService.searchRules`) and returns one synthesized, evidence-backed finding. That sub-agent is instructed to notice an unresolved keyword or exception in a retrieved passage and search again before concluding — a job that competes for attention when it's just one of several responsibilities on the main model, but gets full focus here. Search depth (`SIMPLE` / `MODERATE` / `IN_DEPTH`, mapping to top-K 10/16/20) is decided by a one-shot local-Ollama classifier (`RulesComplexityClassifier`) run against the sub-agent's own search query, not by the planner.
 
 ### Discriminative Embedding Strategy
 
@@ -33,7 +34,11 @@ Card lookups (`CardToolService.findCard(name)` / `findCards(filter)`) hit a live
 
 ### Externalized Prompts
 
-All prompt text lives in `src/main/resources/prompts/*.md` (`system-prompt.md`, `planner-system-prompt.md`, `character-prompt.md`) and loads lazily at startup, so prompt wording can be edited without recompiling — a restart is still needed to pick up the change.
+All prompt text lives in `src/main/resources/prompts/*.md` (`system-prompt.md`, `planner-system-prompt.md`, `rules-agent-system-prompt.md`, `rules-complexity-prompt.md`, `character-prompt.md`) and loads lazily at startup, so prompt wording can be edited without recompiling — a restart is still needed to pick up the change.
+
+### Round-Trip Transcript Logging
+
+Every tool-calling round-trip — main chat and the rules sub-agent's own internal loop alike — is logged for debugging prompt/tool behavior. Under the `debug` profile, each `/ask` request gets a full copy/paste-friendly transcript (system prompt, user message, every round's model output and tool responses, final answer) written to `logs/`, and each `answerRulesQuestion` call gets its own separate transcript under `logs/rules/` since it can be invoked more than once per request. This is the fastest way to see what arguments the model actually passed to a tool versus what the planner suggested.
 
 ### Resilient SSE Streaming
 
@@ -52,9 +57,11 @@ Profiles combine along two independent axes:
 | Axis | Options | Effect |
 |------|---------|--------|
 | Infra | `debug` / `prod` | `debug`: in-memory vector store + embedded H2, no Redis. `prod` (default when no infra profile is set): real Postgres for both pgvector and conversation history, real Redis. |
-| Model | `openai` / `ollama` | `openai`: `o4-mini` chat + `text-embedding-3-small` embeddings, needs `OPEN_AI_KEY`. `ollama`: `llama3.1` chat + `qwen3-embedding:0.6b` embeddings, fully local, no API key. |
+| Main chat model | `openai` / `ollama` | Switches only the main chat client, the rules sub-agent's client, and the (currently unused) character client. `openai`: `o4-mini`, needs `OPEN_AI_KEY` — chosen because it was more reliable than `qwen2.5:7b-instruct` at making genuine follow-up tool calls. `ollama`: local `qwen2.5:7b-instruct` against `http://localhost:11434`, no API key. |
 
-`application.yaml` defaults to `debug,ollama` — plain `./gradlew bootRun` needs nothing but a local Ollama running. Docker Compose brings up the full stack — app + pgvector + PostgreSQL + Redis — with a single command.
+The query planner, the rules-search complexity classifier, and embeddings (`qwen3-embedding:0.6b`) are **not** part of that switch — they always run on local Ollama regardless of which main-chat-model profile is active, since there's no reason to pay for OpenAI on a one-shot classification or on embedding generation.
+
+`application.yaml` defaults to `debug,openai` — plain `./gradlew bootRun` needs `OPEN_AI_KEY` plus a local Ollama running (for the planner, classifier, and embeddings). Pass `--spring.profiles.active=debug,ollama` for a fully offline run with no key. Docker Compose brings up the full stack — app + pgvector + PostgreSQL + Redis — with a single command.
 
 ---
 
@@ -64,8 +71,9 @@ Profiles combine along two independent axes:
 |-------|-----------|
 | Runtime | Kotlin / Spring Boot |
 | AI Framework | Spring AI |
-| LLM | OpenAI `o4-mini` (`openai` profile) / Ollama `llama3.1` (`ollama` profile) |
-| Embeddings | OpenAI `text-embedding-3-small` / Ollama `qwen3-embedding:0.6b` |
+| Main Chat LLM | OpenAI `o4-mini` (`openai` profile) / Ollama `qwen2.5:7b-instruct` (`ollama` profile) |
+| Planner / Classifier LLM | Ollama `qwen2.5:7b-instruct` (always, regardless of main-chat profile) |
+| Embeddings | Ollama `qwen3-embedding:0.6b` (always, regardless of main-chat profile) |
 | Vector Store | PostgreSQL + pgvector (pg18) |
 | Conversation History | PostgreSQL (JPA) |
 | Stream Buffer | Redis Streams |
@@ -86,18 +94,24 @@ AimuroChatServiceImpl (DebugAimuroChatServiceImpl under `debug`)
       │
       ▼
 AgenticChatOrchestrator.streamResponse
-  └─ QueryPlannerService.plan(query) — decomposes into sub-questions,
-     tags each with a tool (card lookup / rules search / none), sets depth
-  └─ Attaches only the tools the plan calls for: RulesSearchToolService,
+  └─ QueryPlannerService.plan(query) [local Ollama] — decomposes into
+     sub-questions, tags each with a tool (card lookup / rules search / none)
+  └─ Attaches only the tools the plan calls for: RulesAgentService,
      CardToolService, both, or neither
   └─ Single .stream() call on the main chat model, with a per-tool
      routing-hint block appended to the user message
       │
       ▼
-Main LLM (OpenAI o4-mini or Ollama llama3.1)
+Main LLM (OpenAI o4-mini or Ollama qwen2.5:7b-instruct)
   └─ Spring AI tool-calling loop — the model itself decides whether,
      how many times, and in what order to call:
-       ├─ searchRules(query, depth) → similarity search against pgvector
+       ├─ answerRulesQuestion(question) → RulesAgentService
+       │     └─ its OWN nested tool-calling loop, sole tool = searchRules
+       │           ├─ RulesComplexityClassifier [local Ollama] picks
+       │           │  SIMPLE/MODERATE/IN_DEPTH → top-K 10/16/20
+       │           └─ similarity search against pgvector
+       │     └─ notices unresolved keywords/exceptions and re-searches
+       │        before returning one synthesized <rules_finding>
        └─ findCard(name) / findCards(filter) → GraphQL → gundamhub-card-service
   └─ Produces one streamed final answer once all tool round-trips resolve
       │
@@ -121,10 +135,15 @@ GET /ask/{requestId}/stream  → Reconnect to / replay an in-progress or complet
 # Full stack with OpenAI (Docker)
 OPEN_AI_KEY=your-key ./aimuro-build.sh
 
-# Full stack with real infra + Ollama (requires Ollama running locally on port 11434)
+# Full stack with real infra + Ollama (requires Ollama running locally on port 11434
+# with qwen2.5:7b-instruct + qwen3-embedding:0.6b pulled)
 ./gradlew bootRun --args='--spring.profiles.active=prod,ollama'
 
-# Debug mode — no database or Redis required (this is the default: plain `./gradlew bootRun` works too)
+# Debug mode — no database or Redis required (this is the default: plain `./gradlew bootRun`
+# works too, but still needs OPEN_AI_KEY plus a local Ollama for the planner/classifier/embeddings)
+./gradlew bootRun --args='--spring.profiles.active=debug,openai'
+
+# Fully offline debug mode — no OpenAI key needed at all
 ./gradlew bootRun --args='--spring.profiles.active=debug,ollama'
 ```
 

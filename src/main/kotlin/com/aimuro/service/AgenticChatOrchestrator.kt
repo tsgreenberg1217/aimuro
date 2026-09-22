@@ -6,7 +6,7 @@ import com.aimuro.planner.QueryPlan
 import com.aimuro.planner.QueryPlannerService
 import com.aimuro.planner.ToolTarget
 import com.aimuro.tools.CardToolService
-import com.aimuro.tools.RulesSearchToolService
+import com.aimuro.tools.RulesAgentService
 import org.slf4j.LoggerFactory
 import org.springframework.ai.chat.client.ChatClient
 import org.springframework.ai.chat.messages.Message
@@ -21,7 +21,7 @@ class AgenticChatOrchestrator(
     @CharacterChatClient private val characterChatClient: ChatClient,
     private val queryPlannerService: QueryPlannerService,
     private val cardToolService: CardToolService,
-    private val rulesSearchToolService: RulesSearchToolService,
+    private val rulesAgentService: RulesAgentService,
     private val synthesizedPromptFileWriter: SynthesizedPromptFileWriter,
 ) {
 
@@ -32,9 +32,14 @@ class AgenticChatOrchestrator(
 
         val plan = queryPlannerService.plan(userQuery)
 
+        // rulesAgentService.answerRulesQuestion is a real @Tool here, exactly like cardToolService's
+        // findCard/findCards — the orchestrator only decides whether rules research is offered at
+        // all (gated on needsRulesLookup), never whether/how many times it's actually invoked. That
+        // decision belongs to aimuroChatClient's own tool-calling loop, same as it already is for
+        // card lookups.
         val tools = buildList {
             if (plan.needsCardLookup) add(cardToolService)
-            if (plan.needsRulesLookup) add(rulesSearchToolService)
+            if (plan.needsRulesLookup) add(rulesAgentService)
         }
         logger.info("AgenticChatOrchestrator: tools offered for this request: {}", tools.map { it::class.simpleName })
 
@@ -52,34 +57,35 @@ class AgenticChatOrchestrator(
             .messages(history)
             .user(userMessage)
             .apply {
-                // .tools(...) is attached only per-request, never as a client-wide default (see
+                // Tools are attached only per-request, never as a client-wide default (see
                 // ChatBotConfiguration — aimuroChatClient has no .defaultTools()) so that the
                 // no-tools-needed path above is unambiguous: an empty list here means the model
                 // genuinely never sees the tools and cannot call them.
                 //
                 // When tools ARE attached, everything from here on — deciding whether/what/how many
                 // times to call them, executing them, feeding results back, and looping until the
-                // model produces a final answer — is handled internally by Spring AI's tool-calling
-                // loop (ToolCallingManager, active by default via internalToolExecutionEnabled). This
-                // one .call() may involve multiple model round-trips under the hood; we only ever
-                // see the final answer.
+                // model produces a final answer — is handled by Spring AI 2.0's ToolCallingAdvisor
+                // in the advisor chain. This one .stream() may involve multiple model round-trips;
+                // RoundTripLoggingAdvisor logs each one. A round that calls rulesAgentService.answerRulesQuestion
+                // runs the rules agent's own separate, internal tool-calling loop (its own
+                // round-trips against rulesAgentChatClient) before returning a single finding as
+                // this round's tool result.
                 if (tools.isEmpty()) this else tools(*tools.toTypedArray())
             }
             .stream()
             .content()
             .doOnNext { answerChunks.add(it) }
-            // Ground truth for the synthesized-prompt transcript's final answer — see the
-            // comment on ChatModelIoLoggingHandler.appendToSynthesizedPromptFile for why that file
-            // can't source this from the observation API itself.
+            // The literal text streamed to the client, appended to the synthesized-prompt transcript
+            // as a cross-check against the final round-trip RoundTripLoggingAdvisor wrote.
             .doOnComplete {
                 // Best-effort ordering only (this file is a debug-only diagnostic transcript, not a
                 // correctness-critical artifact): the per-round-trip writes in
-                // ChatModelIoLoggingHandler.onStop() race this write on an unrelated thread with no
-                // happens-before guarantee relative to this Flux's completion, so give them a
-                // generous head start to land first rather than introducing real cross-thread
-                // synchronization. Runs on its own virtual thread — never block this shared Flux's
-                // completion signal, since AimuroChatServiceImpl/DebugAimuroChatServiceImpl also
-                // hang their own doOnComplete (history save, SSE done sentinel) off of it.
+                // RoundTripLoggingAdvisor may land on a different thread than this completion
+                // signal, so give them a generous head start to land first rather than introducing
+                // real cross-thread synchronization. Runs on its own virtual thread — never block
+                // this shared Flux's completion signal, since
+                // AimuroChatServiceImpl/DebugAimuroChatServiceImpl also hang their own
+                // doOnComplete (history save, SSE done sentinel) off of it.
                 val fullAnswer = answerChunks.joinToString("")
                 Thread.startVirtualThread {
                     Thread.sleep(300)
@@ -111,8 +117,10 @@ class AgenticChatOrchestrator(
     // Lists the planner's sub-questions per tool in the user message, so the model has a focused
     // query for each tool it's given instead of deriving one from a compound raw query. How to act
     // on this block is a standing instruction — see "Tool Routing Rule" in prompts/system-prompt.md.
+    // "Rules research" questions are routed to rulesAgentService.answerRulesQuestion, not a raw
+    // rules search — the model decides whether/how many times to call it, same as card lookups.
     private fun buildToolHints(plan: QueryPlan): String =
-        listOf("Card lookups" to ToolTarget.CARD_LOOKUP, "Rules search" to ToolTarget.RULES_LOOKUP)
+        listOf("Card lookups" to ToolTarget.CARD_LOOKUP, "Rules research" to ToolTarget.RULES_LOOKUP)
             .mapNotNull { (label, tool) ->
                 val questions = plan.subQuestions.filter { it.tool == tool }.map { it.question }
                 if (questions.isEmpty()) null else "$label:\n" + questions.joinToString("\n") { "- \"$it\"" }

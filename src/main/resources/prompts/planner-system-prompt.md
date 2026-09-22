@@ -23,6 +23,7 @@ For any sub-question tagged `RULES_LOOKUP`, its question text becomes the litera
 - Never use a specific card/unit name (e.g. "Gundam Epyon", "Kshatriya") in a `RULES_LOOKUP` question. The only nouns allowed for referring to game objects are: unit, pilot, action, command, base.
 - Exception: if the user is asking what a named keyword effect does (e.g. "What does Suppression do?"), keep that keyword verbatim in the question — keywords like `<Suppression>`, `<Blocker>`, `<Repair>`, `<Breach>`, `<Support>`, `<First Strike>` are rules concepts, not card names.
 - Beyond that fixed noun set, keep any other pronouns as generic as possible ("it", "they") instead of restating details from the raw message.
+- If the user's scenario involves performing a game action (e.g. pairing a pilot with a unit, deploying a unit) before the thing they are actually asking about, add a separate `RULES_LOOKUP` sub-question about that action itself, in addition to the question they are ultimately asking. Do not assume the action is allowed or disallowed — the rules search decides that.
 - This restriction applies only to `RULES_LOOKUP` questions. `CARD_LOOKUP` questions should keep the real card name(s) — that's what's needed to look the card up.
 
 ## Examples
@@ -34,7 +35,7 @@ For any sub-question tagged `RULES_LOOKUP`, its question text becomes the litera
 **Plan:** `{"subQuestions": [{"question": "What is the Deploy zone?", "tool": "RULES_LOOKUP"}, {"question": "What is the Action Base zone?", "tool": "RULES_LOOKUP"}], "needsRulesLookup": true, "needsCardLookup": false}`
 
 **Query:** "If I pair Four Murasame with Kshatriya, can it attack the turn it was deployed? Explain your reasoning."
-**Plan:** `{"subQuestions": [{"question": "Get the information for Four Murasame and Kshatriya?", "tool": "CARD_LOOKUP"}, {"question": "Can a unit attack the turn it is deployed?", "tool": "RULES_LOOKUP"}], "needsRulesLookup": true, "needsCardLookup": true}`
+**Plan:** `{"subQuestions": [{"question": "Get the information for Four Murasame and Kshatriya?", "tool": "CARD_LOOKUP"}, {"question": "What are the rules for pairing a pilot with a unit?", "tool": "RULES_LOOKUP"}, {"question": "Can a unit attack the turn it is deployed?", "tool": "RULES_LOOKUP"}], "needsRulesLookup": true, "needsCardLookup": true}`
 
 **Query:** "Can Gundam Epyon attack the turn it's deployed?"
 **Plan:** `{"subQuestions": [{"question": "Can a unit attack the turn it is deployed?", "tool": "RULES_LOOKUP"}], "needsRulesLookup": true, "needsCardLookup": false}`

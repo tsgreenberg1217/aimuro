@@ -69,10 +69,10 @@ class SynthesizedPromptFileWriter(
         }
     }
 
-    // The only trustworthy source for the actual final answer: ChatModelObservationContext.response
-    // is not reliable per round-trip during a streaming internal-tool-calling loop (see
-    // ObservabilityConfiguration.ChatModelIoLoggingHandler), so the caller passes the literal text
-    // that was streamed to the client instead of anything derived from the observation API.
+    // Ground truth for the final answer: the caller passes the literal text that was streamed to
+    // the client, as a cross-check against the last round-trip block RoundTripLoggingAdvisor wrote
+    // (ChatModelObservationContext.response is not reliable per round-trip when streaming — see
+    // ObservabilityConfiguration.ChatModelIoLoggingHandler).
     fun finishRequest(finalAnswer: String) {
         if (!enabled) return
         synchronized(lock) {

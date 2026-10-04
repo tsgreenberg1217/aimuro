@@ -3,11 +3,7 @@ package com.aimuro.configuration
 import com.aimuro.configuration.prompt.PromptConfig
 import com.aimuro.tools.RulesSearchToolService
 import org.springframework.ai.chat.client.ChatClient
-import org.springframework.ai.ollama.OllamaChatModel
-import org.springframework.ai.ollama.api.OllamaApi
-import org.springframework.ai.ollama.api.OllamaChatOptions
 import org.springframework.beans.factory.annotation.Qualifier
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Primary
@@ -27,60 +23,30 @@ annotation class RulesAgentChatClient
 @Configuration
 class ChatBotConfiguration {
 
-    // Manually built so the planner stays on local Ollama even when spring.ai.model.chat is
-    // "openai" (aimuroChatClient on OpenAI) — that property is a single global switch that can
-    // only produce one autoconfigured ChatModel for the whole app, so there's no way to get the
-    // planner onto a *different* provider than aimuroChatClient through the switch alone. Reuses
-    // spring.ai.ollama.* (set unconditionally in application.yaml) rather than new keys.
-    // defaultCandidate = false keeps this out of unqualified ChatModel autowiring (Spring
-    // resolves by assignability, not by this method's declared return type — OllamaChatModel
-    // still *is* a ChatModel, so without this flag it collides with whichever provider's
-    // autoconfigured ChatModel bean is active, e.g. openAiChatModel under the openai profile,
-    // or the autoconfigured ollamaChatModel bean under the ollama profile) while still being
-    // explicitly resolvable via @Qualifier below.
-    @Bean(defaultCandidate = false)
-    fun plannerOllamaChatModel(
-        @Value("\${spring.ai.ollama.base-url}") baseUrl: String,
-        @Value("\${spring.ai.ollama.chat.options.model}") model: String,
-    ): OllamaChatModel {
-        val ollamaApi = OllamaApi.builder()
-            .baseUrl(baseUrl)
-            .build()
-
-        return OllamaChatModel.builder()
-            .ollamaApi(ollamaApi)
-            .options(
-                OllamaChatOptions.builder()
-                    .model(model)
-                    .build()
-            )
-            .build()
-    }
-
     // Dedicated low-overhead client for QueryPlannerService's structured-output planning call —
     // deliberately separate from the primary client so the planner never has tools attached to
-    // it and can't itself get pulled into a tool-calling loop. Always local Ollama
-    // (plannerOllamaChatModel above), independent of which provider aimuroChatClient is on: the
-    // one-shot classification call already works fine there, no reason to pay for OpenAI on
-    // every turn just for planning.
+    // it and can't itself get pulled into a tool-calling loop. Rides the same profile-switched
+    // chatClientBuilder as aimuroChatClient — ollama under the ollama profile, OpenAI under
+    // openai — so planning cost follows whichever provider is active, rather than forcing a
+    // separate always-on Ollama dependency.
     @Bean
     @PlannerChatClient
     fun plannerChatClient(
-        @Qualifier("plannerOllamaChatModel") plannerOllamaChatModel: OllamaChatModel,
+        chatClientBuilder: ChatClient.Builder,
         promptConfig: PromptConfig,
-    ): ChatClient = ChatClient.builder(plannerOllamaChatModel)
+    ): ChatClient = chatClientBuilder
         .defaultSystem(promptConfig.plannerSystemPrompt)
         .build()
 
-    // Client for RulesComplexityClassifier's one-shot structured-output call. Always local Ollama
-    // (same plannerOllamaChatModel as the planner), independent of which provider aimuroChatClient
-    // is on, so classifying a rules query never costs an OpenAI call. No tools attached.
+    // Client for RulesComplexityClassifier's one-shot structured-output call. Rides the same
+    // profile-switched chatClientBuilder as aimuroChatClient/plannerChatClient — ollama under
+    // the ollama profile, OpenAI under openai. No tools attached.
     @Bean
     @ComplexityChatClient
     fun complexityChatClient(
-        @Qualifier("plannerOllamaChatModel") plannerOllamaChatModel: OllamaChatModel,
+        chatClientBuilder: ChatClient.Builder,
         promptConfig: PromptConfig,
-    ): ChatClient = ChatClient.builder(plannerOllamaChatModel)
+    ): ChatClient = chatClientBuilder
         .defaultSystem(promptConfig.rulesComplexitySystemPrompt)
         .build()
 
@@ -117,11 +83,8 @@ class ChatBotConfiguration {
     // synthesized, evidence-backed finding. Invoked directly by RulesAgentService — never attached
     // to aimuroChatClient's own tool list; see AgenticChatOrchestrator.
     //
-    // Deliberately rides the SAME profile-switched chatClientBuilder as aimuroChatClient (o4-mini
-    // under openai, qwen2.5:7b-instruct under ollama) rather than the always-local-Ollama
-    // plannerOllamaChatModel used by plannerChatClient/complexityChatClient: unlike those two
-    // one-shot classification calls, this client has to reliably decide to make a follow-up tool
-    // call, which CLAUDE.md documents the local model as unreliable at.
+    // Rides the same profile-switched chatClientBuilder as aimuroChatClient/plannerChatClient/
+    // complexityChatClient (o4-mini under openai, qwen2.5:7b-instruct under ollama).
     //
     // searchRules is hardcoded via .defaultTools(...) rather than attached per-request: this
     // client's tool set never varies (always exactly RulesSearchToolService), unlike aimuroChatClient

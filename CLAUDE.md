@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AIMURO is a Spring Boot (Kotlin) AI chatbot that answers Gundam Trading Card Game rules questions using an agentic RAG pipeline: a planner LLM call decides which tools (rules search, card lookup) the main model should be given, then the main model calls them itself via Spring AI tool-calling. The main tool-calling model is switchable between OpenAI and a local Ollama model via profile (see Profiles below); the planner and the embedding model are always local Ollama regardless. Backed by PostgreSQL + pgvector for semantic search.
+AIMURO is a Spring Boot (Kotlin) AI chatbot that answers Gundam Trading Card Game rules questions using an agentic RAG pipeline: a planner LLM call decides which tools (rules search, card lookup) the main model should be given, then the main model calls them itself via Spring AI tool-calling. The main tool-calling model, the planner, and the rules-complexity classifier are all switchable between OpenAI and a local Ollama model via the same profile (see Profiles below), and so is the embedding model. There is no default LLM-provider profile — you must always explicitly activate `ollama` and/or `openai`. Backed by PostgreSQL + pgvector for semantic search.
 
 ## Build and Run Commands
 
@@ -12,13 +12,12 @@ AIMURO is a Spring Boot (Kotlin) AI chatbot that answers Gundam Trading Card Gam
 # Build the project
 ./gradlew build
 
-# Run locally — active profiles default to `debug,openai` in application.yaml (in-memory
-# vector store + embedded H2, no Postgres/Redis needed). Needs OPEN_AI_KEY for the main model,
-# AND a local Ollama on :11434 with qwen2.5:7b-instruct + qwen3-embedding:0.6b pulled — the
-# planner, complexity classifier and embeddings always run on Ollama regardless of profile.
+# Run locally — application.yaml defaults active profiles to `debug,openai` (in-memory
+# vector store + embedded H2, no Postgres/Redis needed). Chat and embeddings both on OpenAI;
+# needs OPEN_AI_KEY.
 ./gradlew bootRun
 
-# Fully offline instead (no OpenAI key)
+# Fully offline instead (no OpenAI key) — planner/classifier/main model/embeddings all on Ollama
 ./gradlew bootRun --args='--spring.profiles.active=debug,ollama'
 
 # Run against real infra instead (Postgres + pgvector + Redis via the monorepo docker-compose)
@@ -48,15 +47,17 @@ Profiles are combined along two independent axes:
 |------|---------|--------|
 | Infra | `debug` | In-memory `SimpleVectorStore` (`DebugVectorStoreConfiguration`), embedded H2 for both datasources (`DebugConversationJpaConfiguration`), no Redis (`StreamBufferService`/`ChatStreamProducer`/`ChatStreamConsumer`/`RedisConfiguration` are all `@Profile("!debug")` and excluded). `DebugAimuroChatServiceImpl` replaces the Redis-backed service and replays chunks from an in-memory map instead. |
 | Infra | `prod` (or no infra profile) | Real Postgres for both the pgvector store and the conversation-history DB (`ConversationJpaConfiguration`, dual `DataSource`/`JdbcTemplate` beans), real Redis. |
-| Main chat model | `openai` | `aimuroChatClient`, `rulesAgentChatClient`, and the currently-unused `characterChatClient` all use OpenAI `o4-mini`, needs `OPEN_AI_KEY`. Chosen over `ollama` because qwen2.5-instruct was observed missing implicit second tool-calls (e.g. not re-querying `searchRules` for a term like "Link Units" not already covered) that o4-mini catches reliably — that specific follow-up decision now happens inside `rulesAgentChatClient`'s own loop (see `RulesAgentService` below), which is why it rides this same switch rather than being pinned to Ollama like the planner/classifier. |
-| Main chat model | `ollama` | `aimuroChatClient`/`rulesAgentChatClient`/`characterChatClient` use local `qwen2.5:7b-instruct` against `http://localhost:11434`, no API key. |
+| Model provider | `openai` | Embeddings plus `aimuroChatClient`, `rulesAgentChatClient`, `plannerChatClient`, `complexityChatClient`, and the currently-unused `characterChatClient` all use OpenAI `o4-mini`, needs `OPEN_AI_KEY`. Chosen over `ollama` for `aimuroChatClient`/`rulesAgentChatClient` because qwen2.5-instruct was observed missing implicit second tool-calls (e.g. not re-querying `searchRules` for a term like "Link Units" not already covered) that o4-mini catches reliably — that specific follow-up decision happens inside `rulesAgentChatClient`'s own loop (see `RulesAgentService` below). |
+| Model provider | `ollama` | Embeddings (`qwen3-embedding:0.6b`) plus `aimuroChatClient`/`rulesAgentChatClient`/`plannerChatClient`/`complexityChatClient`/`characterChatClient` all use local `qwen2.5:7b-instruct` against `http://localhost:11434`, no API key. |
 
-**The planner and the embedding model are NOT part of this switch** — they're always local Ollama regardless of which main-chat-model profile is active:
-- `plannerChatClient` (used by `QueryPlannerService`'s structured-output call) is built from a manually-constructed `OllamaChatModel` bean (`plannerOllamaChatModel` in `ChatBotConfiguration.kt`) that bypasses the `spring.ai.model.chat` switch entirely — the one-shot classification call works fine on the local model, no reason to pay for OpenAI on every turn just to plan.
-- Embeddings (`VectorStore`/`RulesSearchToolService` search, `IngestionService`/`MarkdownDocService` startup ingestion) are pinned via a fixed `spring.ai.model.embedding: ollama` in `application.yaml`, using `qwen3-embedding:0.6b`.
-- Because of this, `spring.ai.ollama.*` connection settings (`base-url`, `chat.options.model`, `embedding.options.model`, `init.pull-model-strategy`) live in the always-active base `application.yaml`, not `application-ollama.yaml` — they're needed regardless of which main-chat-model profile is chosen, including `openai` run without also activating `ollama`. `application-ollama.yaml`/`application-openai.yaml` now only own the `spring.ai.model.chat` switch itself plus (for `openai`) the OpenAI-specific connection settings.
+**What the provider profile switches:**
+- `plannerChatClient` (`QueryPlannerService`'s structured-output call) and `complexityChatClient` (`RulesComplexityClassifier`'s structured-output call) are both built in `ChatBotConfiguration.kt` from the same profile-switched `chatClientBuilder` as `aimuroChatClient` — they ride whichever provider `spring.ai.model.chat` selects, so a planning/classification call costs real OpenAI tokens under the `openai` profile just like the main model.
+- Embeddings (`VectorStore`/`RulesSearchToolService` search, `IngestionService`/`MarkdownDocService` startup ingestion) follow `spring.ai.model.embedding`, which `application-openai.yaml` sets to `openai` (Spring AI's default OpenAI embedding model, 1536 dims) and `application-ollama.yaml` sets to `ollama`. Exactly one provider must win: with neither set, both the Ollama and OpenAI embedding beans load and `PgVectorStoreAutoConfiguration` fails with "required a single bean, but 2 were found".
+- Switching embedding providers changes the vector dimension, so an existing pgvector `vector_store` table built with the other provider has to be dropped (or the volume reset) before re-ingesting.
+- `spring.ai.ollama.*` connection settings live in `application-ollama.yaml`, gated behind the `ollama` profile. There is no default LLM-provider profile; an active-profile list must always name one.
+- Combining `ollama` and `openai` follows last-active-profile-wins for `spring.ai.model.chat` and `spring.ai.model.embedding` (both files set both), so the later profile owns chat *and* embeddings.
 
-`application.yaml` currently defaults `spring.profiles.active` to `debug,openai` — plain `./gradlew bootRun` needs `OPEN_AI_KEY` for `aimuroChatClient` plus a local Ollama for the planner/classifier/embeddings. Pass `--spring.profiles.active=debug,ollama` for a fully offline run (no key).
+`application.yaml` defaults `spring.profiles.active` to `debug,openai` (OpenAI for everything, needs `OPEN_AI_KEY`). Use `--spring.profiles.active=debug,ollama` for a fully offline run (no key).
 
 ## Architecture
 
@@ -70,7 +71,7 @@ Profiles are combined along two independent axes:
 
 **Tools (Spring AI `@Tool` methods, called by the model itself — not orchestrated procedurally):**
 - `RulesAgentService.answerRulesQuestion(question)` — the rules tool `aimuroChatClient` is actually given (see Architecture step 4). Internally runs `rulesAgentChatClient`'s own tool-calling loop and returns one synthesized finding, not raw passages.
-- `RulesSearchToolService.searchRules(query)` — semantic search against the pgvector store. **Not attached to `aimuroChatClient`** — its only caller is `rulesAgentChatClient`, wired as that client's sole `.defaultTools(...)` entry in `ChatBotConfiguration.kt`. The service determines question complexity itself: `RulesComplexityClassifier` runs a one-shot structured-output call (dedicated `@ComplexityChatClient` bean, always local Ollama like the planner, prompt in `prompts/rules-complexity-prompt.md`) returning a `SearchDepth` (`SIMPLE`/`MODERATE`/`IN_DEPTH`) that maps to top-K 10/16/20, failing open to `MODERATE`. Neither the planner nor the rules agent supplies depth — the planner has no `depth` field since it only applies to rules search. The rules agent is instructed to write a focused search query rather than pass the raw sub-question unmodified; the classifier sees that query.
+- `RulesSearchToolService.searchRules(query)` — semantic search against the pgvector store. **Not attached to `aimuroChatClient`** — its only caller is `rulesAgentChatClient`, wired as that client's sole `.defaultTools(...)` entry in `ChatBotConfiguration.kt`. The service determines question complexity itself: `RulesComplexityClassifier` runs a one-shot structured-output call (dedicated `@ComplexityChatClient` bean, rides the same profile-switched model as the planner/main chat client, prompt in `prompts/rules-complexity-prompt.md`) returning a `SearchDepth` (`SIMPLE`/`MODERATE`/`IN_DEPTH`) that maps to top-K 10/16/20, failing open to `MODERATE`. Neither the planner nor the rules agent supplies depth — the planner has no `depth` field since it only applies to rules search. The rules agent is instructed to write a focused search query rather than pass the raw sub-question unmodified; the classifier sees that query.
 - `CardToolService.findCard(name)` / `findCards(filter: CardFilterQuery)` — live card lookups via `GundamCardGraphQlClient`, which calls the `gundamhub-card-service` GraphQL API (`gundam.card.service.url`, default `http://localhost:8082/graphql`; GraphQL documents in `src/main/resources/graphql-documents/`).
 
 **SSE Resilience (ask/replay pattern, `!debug` only):**
@@ -96,7 +97,7 @@ Since Spring AI 2.0 the tool loop is `ToolCallingAdvisor` inside the advisor cha
 
 `finishReason` is provider-native and not normalized: OpenAI reports `tool_calls` for a tool-calling round, but local Ollama reports `stop` even when the round is a tool call — so decide "was this a tool round?" from the presence of `toolCall` lines, not from `finishReason`.
 
-`ObservabilityConfiguration`'s `ChatModelIoLoggingHandler` (a Micrometer observation handler) still logs each model call's prompt, but for the main chat it deliberately omits the response: under streaming, its `context.response` is aliased to the final aggregated response on every round but the last. Note it only fires for chat models built with the app's `ObservationRegistry` — the manually-built `plannerOllamaChatModel` (planner + complexity classifier) does not set one, so those calls are not logged by it.
+`ObservabilityConfiguration`'s `ChatModelIoLoggingHandler` (a Micrometer observation handler) still logs each model call's prompt, but for the main chat it deliberately omits the response: under streaming, its `context.response` is aliased to the final aggregated response on every round but the last. It fires for any chat model built via the app's autoconfigured `chatClientBuilder` — which now includes `plannerChatClient`/`complexityChatClient` since they ride that same builder (see Profiles above) rather than a manually-built model.
 
 `RulesAgentService.answerRulesQuestion` gets its own, separate transcript mechanism rather than reusing `SynthesizedPromptFileWriter`: one file per call under `logs/rules/`, named from the sanitized question text plus a timestamp (`RulesAgentTranscriptSession`, created fresh per call — a plain object, not a singleton bean, so nothing races if the main model calls `answerRulesQuestion` more than once in a request). `RulesAgentRoundTripLoggingAdvisor` (built fresh per call by `RulesAgentRoundTripLoggingAdvisorFactory` and attached via request-level `.advisors(...)`, never `.defaultAdvisors(...)`) logs that call's own internal `searchRules` round-trips into it, reusing `RoundTripLoggingAdvisor.kt`'s `renderRound`/`renderMessage` (module-visible `internal` functions) with `label = "rules-agent"`. Gated to `debug` like the main writer.
 
@@ -115,10 +116,10 @@ Since Spring AI 2.0 the tool loop is `ToolCallingAdvisor` inside the advisor cha
 | `RulesSearchToolService.kt` | `@Tool` rules vector search, depth-scaled top-K — only attached to `rulesAgentChatClient`, not `aimuroChatClient` |
 | `RoundTripLoggingAdvisor.kt` | Advisor inside the `ToolCallingAdvisor` loop: per-round-trip output, `finishReason`, usage → log + transcript (see Debugging); also supplies `renderRound`/`renderMessage`, reused by `RulesAgentRoundTripLoggingAdvisor` |
 | `ObservabilityConfiguration.kt` / `SynthesizedPromptFileWriter.kt` | Micrometer prompt logging + per-request (main-chat only) transcript file writer (see Debugging) |
-| `RulesComplexityClassifier.kt` | Local-Ollama classifier deciding `SearchDepth` (and owning the enum) for a rules query |
+| `RulesComplexityClassifier.kt` | Profile-switched classifier deciding `SearchDepth` (and owning the enum) for a rules query |
 | `CardToolService.kt` | `@Tool` card lookups, delegates to `GundamCardService` |
 | `GundamCardGraphQlClient.kt` / `GundamCardService.kt` | GraphQL client to `gundamhub-card-service` |
-| `ChatBotConfiguration.kt` | `aimuroChatClient` (`@Primary`, no default tools) + `rulesAgentChatClient` (`searchRules` as its one default tool) + `plannerChatClient` beans |
+| `ChatBotConfiguration.kt` | `aimuroChatClient` (`@Primary`, no default tools) + `rulesAgentChatClient` (`searchRules` as its one default tool) + `plannerChatClient`/`complexityChatClient`/`characterChatClient` beans — all ride the same profile-switched `chatClientBuilder` |
 | `PromptConfig.kt` / `DefaultPromptConfig.kt` | Loads prompt text from `resources/prompts/*.md` |
 | `IngestionService.kt` | Startup document ingestion into vector store (runs every boot, any profile) |
 | `MarkdownDocService.kt` | Markdown heading-based document splitter (see chunking notes above) |
@@ -154,9 +155,9 @@ Both `/ask` and `/ask/{requestId}/stream` return `text/event-stream` (SSE). Each
 
 ## Infrastructure
 
-- **pgvector DB**: `pgvector:5432`, DB name `gundam-tcg-rules-vector-db`, user `postgres` (real infra / `prod` profile only)
-- **Conversation DB**: `postgres:5432`, DB name `aimuro-conversation-db`, user `postgres` (real infra / `prod` profile only)
+- **pgvector DB**: `${PGVECTOR_HOST:localhost}:${PGVECTOR_PORT:5432}`, DB name `gundam-tcg-rules-vector-db`, user `postgres` (real infra / `prod` profile only; set `PGVECTOR_HOST=pgvector` when the app runs inside the compose network)
+- **Conversation DB**: `${CONVERSATION_DB_HOST:localhost}:${CONVERSATION_DB_PORT:5432}`, DB name `aimuro-conversation-db`, user `postgres` (real infra / `prod` profile only; set `CONVERSATION_DB_HOST=postgres` inside the compose network). Defaults let both DBs share one local pgvector container.
 - **Redis**: `localhost:6379` — response stream buffering and request state (`prod` / `!debug` only)
 - **Card service**: `gundam.card.service.url`, default `http://localhost:8082/graphql` — see `gundamhub-card-service` in the parent monorepo
 - **Docker port**: app maps `8080:8080`
-- **OpenAI API key**: `OPEN_AI_KEY` env var, required only under the `openai` model profile
+- **OpenAI API key**: `OPEN_AI_KEY` env var, required under the `openai` model profile (chat + embeddings)

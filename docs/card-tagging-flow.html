@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIMURO Card Tagging Flow</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Saira+Condensed:wght@600;700&display=swap">
+<style>
+  /* Layout: single reading column, wide diagram panel, worked example as input → output pair */
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --fg: #1b1f27; --muted: #5a6272;
+    --line: #d7dbe3; --accent: #c4302b;
+    --llm: #e8defa; --code: #d9f0e3; --io: #dbe8fb; --warn: #fbeccb;
+    --font-display: "Saira Condensed", "Arial Narrow", sans-serif;
+    --font-body: "IBM Plex Sans", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --surface: #1a1e26; --fg: #e6e9ef; --muted: #9aa3b4;
+      --line: #2c323d; --accent: #ef5a52;
+      --llm: #3a3150; --code: #22402f; --io: #233650; --warn: #4a3b1c;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding-inline: 20px; padding-block: 36px 56px; display: grid; gap: 28px; }
+  header { display: grid; gap: 8px; max-width: 70ch; }
+  .eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+  h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(30px, 5vw, 44px); line-height: 1.05; margin: 0; text-wrap: balance; }
+  h2 { font-family: var(--font-display); font-weight: 600; font-size: 22px; margin: 0; letter-spacing: .02em; }
+  p { margin: 0; }
+  header p, .muted { color: var(--muted); }
+  code, pre.code { font-family: var(--font-mono); font-size: 13px; }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; overflow-x: auto; }
+  .diagram pre.mermaid { margin: 0; min-width: 820px; background: transparent; }
+  .key { display: flex; flex-wrap: wrap; gap: 10px 22px; font-size: 13px; color: var(--muted); }
+  .key span { display: inline-flex; align-items: center; gap: 8px; }
+  .sw { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--line); display: inline-block; }
+  .sw.code { background: var(--code); } .sw.io { background: var(--io); } .sw.llm { background: var(--llm); } .sw.warn { background: var(--warn); }
+  .example { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+  .example > div { display: grid; gap: 8px; align-content: start; min-width: 0; }
+  .cap { font-family: var(--font-mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  pre.code { margin: 0; white-space: pre; overflow-x: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 14px; line-height: 1.5; }
+  .notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
+  .notes > div { display: grid; gap: 4px; align-content: start; min-width: 0; }
+  .notes h3 { font-family: var(--font-display); font-weight: 600; font-size: 18px; margin: 0; }
+  .notes p { font-size: 14px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">AIMURO · tagging stage, zoomed in</div>
+    <h1>From card text to rule pointers</h1>
+    <p>What happens to each card between <code>findCard</code> and the <code>&lt;facts&gt;</code> block. Every step is deterministic code driven by one fixed tag table. Nothing here depends on the question except the final mechanics filter.</p>
+  </header>
+
+  <div class="key" aria-label="Legend">
+    <span><i class="sw io"></i>Input / external data</span>
+    <span><i class="sw code"></i>Deterministic code</span>
+    <span><i class="sw warn"></i>Fail-open path (kept as text, logged)</span>
+    <span><i class="sw llm"></i>Consumed by the model</span>
+  </div>
+
+  <div class="panel diagram">
+<pre class="mermaid">
+flowchart TD
+    IN["Card from card-service&lt;br/&gt;effect (HTML string) · link · trait · cardType"]
+
+    IN --&gt; CACHE{"Annotation cached&lt;br/&gt;for this card code?"}
+    CACHE -- yes --&gt; ANN
+    CACHE -- no --&gt; NORM
+
+    NORM["Normalize effect&lt;br/&gt;decode &amp;amp;lt; &amp;amp;gt; · split on &amp;lt;br&amp;gt;&lt;br/&gt;one clause per line"]
+
+    NORM --&gt; CLAUSE["For each clause"]
+    CLAUSE --&gt; STRIP["Strip reminder text in ( … )&lt;br/&gt;after keywords&lt;br/&gt;(rule 2-11-4: explanatory only)"]
+
+    STRIP --&gt; LEAD["Read leading 【…】 brackets&lt;br/&gt;in order"]
+    STRIP --&gt; KW["Read &amp;lt;Keyword N&amp;gt; tokens"]
+
+    LEAD --&gt; SPLIT["Split on ･&lt;br/&gt;base tag + qualifier&lt;br/&gt;During Pair ･ (Cyber-Newtype) Pilot"]
+    KW --&gt; VAL["Split name + value&lt;br/&gt;Breach · 3"]
+
+    SPLIT --&gt; BODY
+    VAL --&gt; BODY
+    BODY["Remaining clause text&lt;br/&gt;kept verbatim as the effect body"]
+
+    BODY --&gt; ANYTAG{"Clause had&lt;br/&gt;any tag?"}
+    ANYTAG -- no --&gt; UNTAG["UNTAGGED clause&lt;br/&gt;passed through as text"]
+
+    ANYTAG -- yes --&gt; LOOK{"Tag in&lt;br/&gt;TAG_RULES table?"}
+    LOOK -- no --&gt; UNMAP["UNMAPPED tag&lt;br/&gt;kept as text + warning log&lt;br/&gt;(add a table row)"]
+    LOOK -- yes --&gt; MAP["Tag → mechanics[] + ruleIds[]&lt;br/&gt;e.g. During Pair → PAIR → 3-3"]
+
+    IN --&gt; LINK["Parse link field"]
+    LINK --&gt; LNAME["[Four Murasame]&lt;br/&gt;→ NAME condition"]
+    LINK --&gt; LTRAIT["(Titans) Trait&lt;br/&gt;→ TRAIT condition"]
+    LNAME --&gt; LCOND["LinkCondition&lt;br/&gt;(read later by checkLink)"]
+    LTRAIT --&gt; LCOND
+
+    MAP --&gt; ANN
+    UNTAG --&gt; ANN
+    UNMAP --&gt; ANN
+    LCOND --&gt; ANN
+    ANN["CardAnnotation&lt;br/&gt;clauses[ tags, qualifiers, body, ruleIds ]&lt;br/&gt;+ linkCondition · traits · stats&lt;br/&gt;(question-independent, cacheable)"]
+
+    PM["Planner mechanics&lt;br/&gt;for this question"] --&gt; FILT
+    ANN --&gt; FILT{"For each ruleId:&lt;br/&gt;tag mechanic in&lt;br/&gt;planner mechanics?"}
+    FILT -- yes --&gt; EXP["Rules tree expand&lt;br/&gt;rule + parent + exceptions&lt;br/&gt;+ DEFINES (one hop)"]
+    FILT -- no --&gt; PTR["One-line pointer&lt;br/&gt;'【During Pair】 → rule 3-3'"]
+
+    EXP --&gt; DEDUP["Dedupe rule IDs across all cards&lt;br/&gt;order by rule number"]
+    PTR --&gt; OUT
+    DEDUP --&gt; OUT
+    OUT["Card section of #lt;facts#gt;"] --&gt; MODEL["Main model synthesis loop&lt;br/&gt;may call getRule / checkLink"]
+
+    classDef io fill:#dbe8fb,stroke:#3f6fb5,color:#1b1f27
+    classDef code fill:#d9f0e3,stroke:#3c8a5e,color:#1b1f27
+    classDef warn fill:#fbeccb,stroke:#b8860b,color:#1b1f27
+    classDef llm fill:#e8defa,stroke:#7b5cc4,color:#1b1f27
+    class IN,PM io
+    class CACHE,NORM,CLAUSE,STRIP,LEAD,KW,SPLIT,VAL,BODY,ANYTAG,LOOK,MAP,LINK,LNAME,LTRAIT,LCOND,ANN,FILT,EXP,PTR,DEDUP,OUT code
+    class UNTAG,UNMAP warn
+    class MODEL llm
+</pre>
+  </div>
+
+  <section class="panel" style="display:grid; gap:16px;">
+    <h2>Worked example: Psycho Gundam</h2>
+    <p class="muted">Real card text from <code>gd02.json</code>. Question: <em>“Does Psycho Gundam's Breach go off if it destroys a Blocker?”</em> Planner mechanics: <code>[ATTACK, BATTLE]</code>.</p>
+    <div class="example">
+      <div>
+        <div class="cap">Input from card-service</div>
+<pre class="code">name:  Psycho Gundam   (UNIT)
+trait: (Titans)
+link:  [Four Murasame]
+effect:
+  &amp;lt;Breach 3&amp;gt; (When this Unit's attack
+  destroys an enemy Unit, deal the specified
+  amount of damage to …)&lt;br&gt;
+  【During Pair･(Cyber-Newtype) Pilot】When one
+  of your (Titans) Units destroys an enemy
+  shield area card with damage, this Unit
+  recovers 2 HP.&lt;br&gt;</pre>
+      </div>
+      <div>
+        <div class="cap">CardAnnotation → facts</div>
+<pre class="code">linkCondition: NAME "Four Murasame"
+
+clause 1
+  tag:      Breach  value=3
+  mechanic: BATTLE  ✓ in question
+  rules:    &lt;Breach&gt; keyword rule  → EXPANDED
+
+clause 2
+  tag:       During Pair
+  qualifier: (Cyber-Newtype) Pilot
+  mechanic:  PAIR   ✗ not in question
+  rules:     3-3  → POINTER ONLY
+  body:      "When one of your (Titans) Units
+             destroys … recovers 2 HP."</pre>
+      </div>
+    </div>
+  </section>
+
+  <section class="notes">
+    <div>
+      <h3>Question-independent until the filter</h3>
+      <p>Everything above the mechanics filter depends only on the card, so a <code>CardAnnotation</code> can be cached by card code and reused across questions.</p>
+    </div>
+    <div>
+      <h3>Reminder text is dropped</h3>
+      <p>Parenthesized keyword explanations have no game effect (rule 2-11-4). Stripping them keeps the clause body to what the card actually does, and the full rule comes from the tree instead.</p>
+    </div>
+    <div>
+      <h3>Fail-open, never silent</h3>
+      <p>An untagged clause or an unknown tag stays in the facts as plain text, so the model can still send it to <code>answerRulesQuestion</code>. Unknown tags also log a warning, so a new card set shows up as missing table rows.</p>
+    </div>
+    <div>
+      <h3>Link is parsed, not judged</h3>
+      <p>The link field becomes a typed condition here. Whether a given pilot satisfies it is decided later by the <code>checkLink</code> tool, only when the model asks.</p>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+<script>
+  const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "loose", flowchart: { htmlLabels: true } });
+</script>
+</body>
+</html>
